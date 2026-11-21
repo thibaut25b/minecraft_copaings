@@ -24,6 +24,12 @@ local function meme_position(a, b)
   return type(b) == "table" and a.x == b.x and a.y == b.y and a.z == b.z
 end
 
+--- Clé texte stable d'une position `{ x, y, z }` ("x,y,z"), ou "" si ce n'est pas une position.
+function requetes.cle_position(pos)
+  if type(pos) ~= "table" or pos.x == nil or pos.y == nil or pos.z == nil then return "" end
+  return pos.x .. "," .. pos.y .. "," .. pos.z
+end
+
 local function nommer_demandeur(cible, batiments)
   if type(cible) == "string" then return cible end
   if type(cible) ~= "table" then return "" end
@@ -50,6 +56,7 @@ local function normaliser_une(brute, batiments)
     id = tostring(brute.id),
     libelle = brute.displayName or "",
     demandeur = nommer_demandeur(brute.target, batiments),
+    cible = requetes.cle_position(brute.target),
     quantite = quantite,
     quantite_min = quantite_min,
     candidats = candidats,

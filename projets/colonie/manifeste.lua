@@ -12,6 +12,7 @@ return {
     { depot = "commun/peripheriques.lua", ordinateur = "commun/peripheriques.lua" },
     { depot = "projets/colonie/reglages.lua", ordinateur = "colonie/reglages.lua" },
     { depot = "projets/colonie/requetes.lua", ordinateur = "colonie/requetes.lua" },
+    { depot = "projets/colonie/chantiers.lua", ordinateur = "colonie/chantiers.lua" },
     { depot = "projets/colonie/fourniture.lua", ordinateur = "colonie/fourniture.lua" },
     { depot = "projets/colonie/lecture.lua", ordinateur = "colonie/lecture.lua" },
     { depot = "projets/colonie/vues.lua", ordinateur = "colonie/vues.lua" },

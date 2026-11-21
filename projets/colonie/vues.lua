@@ -1,8 +1,12 @@
 -- Pages du tableau de bord de la colonie : titre, onglets, alertes, corps de page et pied, dessinés sur une cible.
 
 local dessin = require("commun.dessin")
+local chantiers = require("colonie.chantiers")
 
 local vues = {}
+
+local SOUS_ONGLET_SUIVANT = { nom = "suivant", libelle = ">" } -- nom hors du format "x,y,z" des clés de hutte
+local LARGEUR_NOM_MIN = 10 -- en dessous, le bouton de livraison passe sous le nom du constructeur
 
 local LIGNES_FIXES = 3 -- titre, onglets, pied
 local LIGNE_ONGLETS = 2
@@ -214,11 +218,67 @@ local function dessiner_habitants(cible, zone, etat)
   dessin.tableau(cible, zone.x, zone.y, zone.largeur, zone.hauteur, colonnes, rangees)
 end
 
+local function dessiner_ressources(cible, corps, etat, constructeur)
+  if constructeur.erreur then return ecrire_zone(cible, corps, 1, 1, constructeur.erreur, colors.orange) end
+  if #constructeur.ressources == 0 then
+    return ecrire_zone(cible, corps, 1, 1, "Aucune ressource à fournir", colors.lightGray)
+  end
+  local livree = type(etat.livraison) == "table" and etat.livraison[constructeur.cle] == true
+  local lignes = (etat.lignes_chantiers or {})[constructeur.cle] or {}
+  local colonnes = {
+    { titre = "Matériau" },
+    { titre = "Besoin", largeur = 6, alignement = "droite", facultatif = true },
+    { titre = "Dispo", largeur = 6, alignement = "droite", facultatif = true },
+    { titre = "En livr.", largeur = 8, alignement = "droite", facultatif = true },
+    { titre = "Manque", largeur = 6, alignement = "droite" },
+  }
+  if livree then colonnes[#colonnes + 1] = { titre = "Statut", largeur = 11 } end
+  local triees = trier_par_rang(constructeur.ressources, function(ressource) return ressource.manque > 0 and 0 or 1 end)
+  local rangees = {}
+  for i, ressource in ipairs(triees) do
+    local ligne = lignes[ressource.item]
+    local statut = ligne and statut_de(ligne.statut)
+    rangees[i] = {
+      ressource.libelle,
+      tostring(ressource.besoin),
+      tostring(ressource.disponible),
+      tostring(ressource.en_livraison),
+      { texte = tostring(ressource.manque), couleur = ressource.manque > 0 and colors.orange or colors.lime },
+      statut and { texte = statut.libelle, couleur = statut.couleur } or "",
+    }
+  end
+  dessin.tableau(cible, corps.x, corps.y, corps.largeur, corps.hauteur, colonnes, rangees)
+end
+
+local function dessiner_chantiers(cible, zone, etat, plan)
+  if zone.hauteur < 1 then return end
+  if type(etat.constructeurs) ~= "table" then
+    return ecrire_zone(cible, zone, 1, 1, "Constructeurs illisibles : vérifie l'intégrateur", colors.orange)
+  end
+  local chantier = plan.chantier
+  if not chantier then return ecrire_zone(cible, zone, 1, 1, "Aucun constructeur dans la colonie", colors.lightGray) end
+  local constructeur = chantier.constructeur
+  dessin.onglets(cible, zone.x, zone.y, zone.largeur, chantier.sous_onglets, constructeur.cle)
+  local titre = constructeur.nom .. " (niveau " .. constructeur.niveau .. ")"
+  ecrire_zone(cible, zone, 2, 1, dessin.tronquer(titre, chantier.largeur_nom), colors.white)
+  local bouton = chantier.bouton
+  if bouton then
+    local texte = dessin.aligner(bouton.texte, bouton.x2 - bouton.x1 + 1, "centre")
+    if bouton.actif then
+      dessin.ecrire(cible, bouton.x1, bouton.y, texte, colors.black, colors.lime)
+    else
+      dessin.ecrire(cible, bouton.x1, bouton.y, texte, colors.white, colors.red)
+    end
+  end
+  dessiner_ressources(cible, chantier.corps, etat, constructeur)
+end
+
 -- Les pages, dans l'ordre des onglets : un seul endroit pour les noms, les libellés et le dessin.
 local PAGES = {
   { nom = "resume", libelle = "Résumé", dessiner = dessiner_resume },
   { nom = "requetes", libelle = "Requêtes", dessiner = dessiner_requetes },
   { nom = "travaux", libelle = "Travaux", dessiner = dessiner_travaux },
+  { nom = "chantiers", libelle = "Chantiers", dessiner = dessiner_chantiers },
   { nom = "habitants", libelle = "Habitants", dessiner = dessiner_habitants },
 }
 
@@ -255,29 +315,105 @@ local function dessiner_titre(cible, largeur, etat)
   dessin.ecrire(cible, 1, 1, dessin.tronquer(nom, largeur - #etat.heure - 1), colors.white)
 end
 
+-- Sous-onglets des constructeurs : tous s'ils tiennent, sinon « > » (constructeur suivant) puis la première fenêtre
+-- de la liste qui montre le constructeur actif.
+local function sous_onglets(zone, constructeurs, indice)
+  local tous = {}
+  for i, constructeur in ipairs(constructeurs) do tous[i] = { nom = constructeur.cle, libelle = constructeur.nom } end
+  if #dessin.zones_onglets(zone.x, zone.y, zone.largeur, tous) == #tous then return tous end
+  local fenetre
+  for debut = 1, indice do
+    fenetre = { SOUS_ONGLET_SUIVANT }
+    for i = debut, #tous do fenetre[#fenetre + 1] = tous[i] end
+    -- L'actif est le (indice - debut + 2)e onglet de la fenêtre, après « > ».
+    if #dessin.zones_onglets(zone.x, zone.y, zone.largeur, fenetre) >= indice - debut + 2 then return fenetre end
+  end
+  return fenetre
+end
+
+-- Géométrie de la page Chantiers dans `zone` : sous-onglets, nom, bouton de livraison et corps ; nil sans constructeur.
+local function disposer_chantier(zone, etat)
+  local constructeurs = etat.constructeurs
+  local cle = chantiers.choisir(constructeurs, etat.constructeur)
+  if not cle or zone.hauteur < 1 then return nil end
+  local indice = 1
+  for i, constructeur in ipairs(constructeurs) do
+    if constructeur.cle == cle then indice = i end
+  end
+  local actif = type(etat.livraison) == "table" and etat.livraison[cle] == true
+  local texte = "Livraison auto : " .. (actif and "OUI" or "NON")
+  local taille = #texte + 2
+  local fin_zone = zone.y + zone.hauteur - 1
+  local bouton, largeur_nom, debut_corps
+  if zone.largeur >= taille + 1 + LARGEUR_NOM_MIN then
+    local x2 = zone.x + zone.largeur - 1
+    bouton = { x1 = x2 - taille + 1, x2 = x2, y = zone.y + 1 }
+    largeur_nom, debut_corps = zone.largeur - taille - 1, zone.y + 2
+  else
+    bouton = { x1 = zone.x, x2 = zone.x + math.min(taille, zone.largeur) - 1, y = zone.y + 2 }
+    largeur_nom, debut_corps = zone.largeur, zone.y + 3
+  end
+  if bouton.y > fin_zone then bouton = nil end
+  if bouton then bouton.texte, bouton.actif = texte, actif end
+  return {
+    constructeur = constructeurs[indice],
+    suivant = constructeurs[indice % #constructeurs + 1].cle,
+    sous_onglets = sous_onglets(zone, constructeurs, indice),
+    largeur_nom = largeur_nom,
+    bouton = bouton,
+    corps = { x = zone.x, y = debut_corps, largeur = zone.largeur, hauteur = math.max(0, fin_zone - debut_corps + 1) },
+  }
+end
+
+-- Géométrie de tout l'écran : une seule source pour le dessin et pour le toucher.
+local function disposer(cible, etat)
+  local largeur, hauteur = cible.getSize()
+  local page = page_nommee(etat.page)
+  local alertes = lister_alertes(etat, hauteur)
+  local y = LIGNE_ONGLETS + 1 + #alertes
+  local zone = { x = 1, y = y, largeur = largeur, hauteur = math.max(0, hauteur - y) }
+  local plan = {
+    largeur = largeur, hauteur = hauteur, page = page, alertes = alertes, zone = zone,
+    onglets = dessin.zones_onglets(1, LIGNE_ONGLETS, largeur, PAGES),
+  }
+  if page.nom == "chantiers" then plan.chantier = disposer_chantier(zone, etat) end
+  return plan
+end
+
 --- Dessine tout le tableau de bord (titre, onglets, alertes, page `etat.page`, pied) sur la cible.
 function vues.dessiner(cible, etat)
-  local largeur, hauteur = cible.getSize()
+  local plan = disposer(cible, etat)
+  local largeur, hauteur = plan.largeur, plan.hauteur
   dessin.effacer(cible, colors.black)
   dessiner_titre(cible, largeur, etat)
-  local page = page_nommee(etat.page)
-  dessin.onglets(cible, 1, LIGNE_ONGLETS, largeur, PAGES, page.nom)
-  local y = LIGNE_ONGLETS + 1
-  for _, alerte in ipairs(lister_alertes(etat, hauteur)) do
-    dessin.ecrire(cible, 1, y, dessin.aligner(alerte.texte, largeur, alerte.alignement), alerte.couleur, alerte.fond)
-    y = y + 1
+  dessin.onglets(cible, 1, LIGNE_ONGLETS, largeur, PAGES, plan.page.nom)
+  for i, alerte in ipairs(plan.alertes) do
+    dessin.ecrire(cible, 1, LIGNE_ONGLETS + i, dessin.aligner(alerte.texte, largeur, alerte.alignement), alerte.couleur,
+      alerte.fond)
   end
-  local zone = { x = 1, y = y, largeur = largeur, hauteur = math.max(0, hauteur - y) }
-  page.dessiner(cible, zone, etat)
+  plan.page.dessiner(cible, plan.zone, etat, plan)
   local secondes = math.max(0, math.ceil(etat.prochaine_passe))
   dessin.ecrire(cible, 1, hauteur, dessin.tronquer("Prochaine passe dans " .. secondes .. " s", largeur),
     colors.lightGray)
 end
 
---- Nom de la page dont l'onglet contient le point (x, y) de la cible, ou nil.
-function vues.page_touchee(cible, x, y)
-  local largeur = cible.getSize()
-  return dessin.onglet_sous_point(dessin.zones_onglets(1, LIGNE_ONGLETS, largeur, PAGES), x, y)
+--- Action du toucher en (x, y), ou nil : `{ type = "page", page }`, `{ type = "constructeur", cle }` (sous-onglet)
+--- ou `{ type = "livraison", cle }` (bouton de livraison du constructeur montré).
+function vues.action_touchee(cible, etat, x, y)
+  local plan = disposer(cible, etat)
+  local page = dessin.onglet_sous_point(plan.onglets, x, y)
+  if page then return { type = "page", page = page } end
+  local chantier = plan.chantier
+  if not chantier then return nil end
+  local zones = dessin.zones_onglets(plan.zone.x, plan.zone.y, plan.zone.largeur, chantier.sous_onglets)
+  local cle = dessin.onglet_sous_point(zones, x, y)
+  if cle == SOUS_ONGLET_SUIVANT.nom then return { type = "constructeur", cle = chantier.suivant } end
+  if cle then return { type = "constructeur", cle = cle } end
+  local bouton = chantier.bouton
+  if bouton and y == bouton.y and x >= bouton.x1 and x <= bouton.x2 then
+    return { type = "livraison", cle = chantier.constructeur.cle }
+  end
+  return nil
 end
 
 return vues

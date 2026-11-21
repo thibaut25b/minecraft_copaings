@@ -6,6 +6,11 @@ local faux_integrateur = require("faux.integrateur")
 
 local HUTTE = { pos = { x = 10, y = 64, z = -3 }, type = "builder", level = 2, displayName = "Builder's Hut" }
 
+local HUTTE_AFFECTEE = { pos = { x = 10, y = 64, z = -3 }, type = "builder", level = 2, displayName = "Builder's Hut",
+  citizens = { { id = 1, name = "Léa" } } }
+local RESSOURCE_TERRE = { item = { name = "minecraft:dirt", displayName = "Dirt" }, displayName = "Dirt",
+  status = "NOT_NEEDED", needs = 64, available = 10, delivering = 4 }
+
 local function peupler(etat)
   etat.citoyens = {
     -- Comme le mod : pas de clé `job` sur le citoyen, elle est dans `workBuilding`.
@@ -111,6 +116,78 @@ return {
     verif.egal(liste, nil)
     verif.vrai(message:find("presse-papiers", 1, true), message)
     verif.vrai(not message:find("IllegalStateException", 1, true), message)
+  end,
+
+  constructeurs_listent_chaque_hutte_avec_ses_ressources_et_un_nom_distinct = function()
+    local integrateur, etat = faux_integrateur.creer()
+    etat.batiments = {
+      { pos = { x = 20, y = 64, z = 0 }, type = "builder", level = 1, displayName = "Builder's Hut", citizens = {} },
+      { pos = { x = 0, y = 64, z = 0 }, type = "residence", level = 1, displayName = "Residence" },
+      HUTTE_AFFECTEE,
+    }
+    etat.ressources["10,64,-3"] = { RESSOURCE_TERRE }
+    verif.egal(lecture.constructeurs(integrateur), {
+      { cle = "10,64,-3", pos = HUTTE_AFFECTEE.pos, nom = "Léa", niveau = 2, ressources = {
+        { item = "minecraft:dirt", libelle = "Dirt", besoin = 64, disponible = 10, en_livraison = 4, manque = 50 },
+      } },
+      { cle = "20,64,0", pos = { x = 20, y = 64, z = 0 }, nom = "Constructeur 2", niveau = 1, ressources = {} },
+    })
+  end,
+
+  batiments_non_constructeurs_sont_ignores = function()
+    local integrateur, etat = faux_integrateur.creer()
+    etat.batiments = { { pos = { x = 0, y = 64, z = 0 }, type = "residence", level = 1, displayName = "Residence" } }
+    verif.egal(lecture.constructeurs(integrateur), {})
+  end,
+
+  manque_est_borne_a_zero_quand_disponible_et_livraison_depassent_le_besoin = function()
+    local integrateur, etat = faux_integrateur.creer()
+    etat.batiments = { HUTTE_AFFECTEE }
+    etat.ressources["10,64,-3"] = {
+      { item = { name = "minecraft:stone" }, displayName = "Stone", needs = 8, available = 6, delivering = 5 },
+    }
+    verif.egal(lecture.constructeurs(integrateur)[1].ressources[1].manque, 0)
+  end,
+
+  hutte_en_panne_reste_listee_vide_avec_un_message_sans_bloquer_les_autres = function()
+    local integrateur, etat = faux_integrateur.creer()
+    local autre = { pos = { x = 30, y = 64, z = 0 }, type = "builder", level = 1, displayName = "Builder's Hut" }
+    etat.batiments = { HUTTE_AFFECTEE, autre }
+    etat.pannes_ressources["10,64,-3"] = "chunk déchargé"
+    etat.ressources["30,64,0"] = { RESSOURCE_TERRE }
+    local liste = lecture.constructeurs(integrateur)
+    verif.egal(liste[1].ressources, {})
+    verif.vrai(liste[1].erreur:find("chunk déchargé", 1, true))
+    verif.egal({ #liste[2].ressources, liste[2].erreur }, { 1, nil })
+  end,
+
+  hutte_sans_ressources_lisibles_au_retour_nil_reste_listee_avec_un_message = function()
+    local integrateur, etat = faux_integrateur.creer()
+    etat.batiments = { HUTTE_AFFECTEE }
+    integrateur.getBuilderResources = function() return nil end
+    local liste = lecture.constructeurs(integrateur)
+    verif.egal(liste[1].ressources, {})
+    verif.vrai(liste[1].erreur:find("illisibles", 1, true))
+  end,
+
+  constructeurs_ne_dependent_pas_de_get_requests = function()
+    local integrateur, etat = faux_integrateur.creer()
+    etat.batiments = { HUTTE_AFFECTEE }
+    etat.ressources["10,64,-3"] = { RESSOURCE_TERRE }
+    etat.exceptions.getRequests = "is not valid in current registry set"
+    verif.egal(lecture.constructeurs(integrateur)[1].ressources[1].manque, 50)
+    for _, appel in ipairs(etat.appels) do verif.vrai(appel ~= "getRequests") end
+  end,
+
+  constructeurs_illisibles_hors_colonie_ou_sans_batiments_renvoient_nil_et_un_message = function()
+    local integrateur, etat = faux_integrateur.creer()
+    etat.exceptions.getBuildings = "chunk déchargé"
+    local liste, message = lecture.constructeurs(integrateur)
+    verif.egal(liste, nil)
+    verif.vrai(message:find("chunk déchargé", 1, true))
+    etat.en_colonie = false
+    verif.egal(lecture.constructeurs(integrateur), nil)
+    verif.egal(lecture.constructeurs(nil), nil)
   end,
 
   requetes_illisibles_renvoient_nil_et_le_message = function()

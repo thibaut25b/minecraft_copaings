@@ -6,12 +6,15 @@ local HORS_COLONIE = "Here is no colony or you don't have the right permissions"
 
 --- Crée un faux intégrateur et renvoie `integrateur, etat`. Le test pilote `etat` : `en_colonie`, `nom`, `style`,
 -- `bonheur`, `nombre`, `limite`, `tombes`, `attaque`, `raid`, `chantiers`, `citoyens`, `visiteurs`, `batiments`,
--- `travaux`, `requetes`, `exceptions` (méthode -> message levé). Il lit `appels` (noms des méthodes appelées).
+-- `travaux`, `requetes`, `ressources` ("x,y,z" de hutte -> retour de `getBuilderResources`),
+-- `pannes_ressources` ("x,y,z" -> message levé pour cette hutte), `exceptions` (méthode -> message levé).
+-- Il lit `appels` (noms des méthodes appelées).
 function integrateur.creer()
   local etat = {
     en_colonie = true, nom = "Valfleuri", style = "medievaloak", bonheur = 7.43, nombre = 2, limite = 25, tombes = 0,
     attaque = false, raid = false, chantiers = 0,
-    citoyens = {}, visiteurs = {}, batiments = {}, travaux = {}, requetes = {}, exceptions = {}, appels = {},
+    citoyens = {}, visiteurs = {}, batiments = {}, travaux = {}, requetes = {}, ressources = {}, pannes_ressources = {},
+    exceptions = {}, appels = {},
   }
   local faux = {}
 
@@ -41,6 +44,22 @@ function integrateur.creer()
   methode("getBuildings", valeur("batiments"))
   methode("getWorkOrders", valeur("travaux"))
   methode("getRequests", valeur("requetes"))
+
+  -- Comme le mod : position obligatoire, `nil` sans hutte de constructeur à cette position.
+  methode("getBuilderResources", function(pos)
+    if type(pos) ~= "table" or pos.x == nil or pos.y == nil or pos.z == nil then
+      error("Table should contains key 'x', 'y' and 'z'", 0)
+    end
+    local cle = pos.x .. "," .. pos.y .. "," .. pos.z
+    if etat.pannes_ressources[cle] then error(etat.pannes_ressources[cle], 0) end
+    for _, batiment in ipairs(etat.batiments) do
+      local p = batiment.pos
+      if batiment.type == "builder" and p.x == pos.x and p.y == pos.y and p.z == pos.z then
+        return etat.ressources[cle] or {}
+      end
+    end
+    return nil
+  end)
 
   return faux, etat
 end

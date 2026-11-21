@@ -33,14 +33,19 @@ return {
   normaliser_nomme_le_demandeur_d_apres_le_batiment_a_la_position_cible = function()
     local liste = requetes.normaliser({ brute() }, BATIMENTS)
     verif.egal(liste, { {
-      id = "tok-1", libelle = "16 Oak Planks", demandeur = "Builder's Hut", quantite = 16, quantite_min = 4,
-      candidats = { PLANCHE }, equipement = false,
+      id = "tok-1", libelle = "16 Oak Planks", demandeur = "Builder's Hut", cible = "1,64,2", quantite = 16,
+      quantite_min = 4, candidats = { PLANCHE }, equipement = false,
     } })
   end,
 
   normaliser_garde_une_cible_chaine_comme_demandeur = function()
     local liste = requetes.normaliser({ brute({ target = "Léa" }) }, BATIMENTS)
     verif.egal(liste[1].demandeur, "Léa")
+  end,
+
+  normaliser_laisse_la_cible_vide_si_ce_n_est_pas_une_position = function()
+    local liste = requetes.normaliser({ brute({ target = "Léa" }), brute({ target = { x = 1 } }) }, BATIMENTS)
+    verif.egal({ liste[1].cible, liste[2].cible }, { "", "" })
   end,
 
   normaliser_laisse_le_demandeur_vide_si_aucun_batiment_a_la_position = function()

@@ -27,6 +27,12 @@ L'ordinateur lance ensuite la colonie à chaque démarrage. Relancer la commande
 Ils sont dans `/colonie.cfg`, créé au premier lancement et jamais écrasé par une mise à jour.
 La liste et le sens de chaque réglage sont dans `projets/colonie/reglages.lua`.
 
+## Chantiers
+
+L'onglet « Chantiers » a un sous-onglet par constructeur : ses matériaux, ce qu'il en a et ce qui manque.
+Le bouton « Livraison auto » livre ses manques depuis AE2. Il est sur NON par défaut et ton choix reste
+dans `/colonie.cfg`. Cela marche même quand les requêtes sont bloquées par un objet enchanté.
+
 ## Diagnostic
 
 Si l'affichage reste vide ou si un périphérique n'est pas reconnu :

@@ -31,7 +31,8 @@ local function monde()
 end
 
 -- Lance le point d'entrée : chaque boucle est une coroutine, reprise `tours` fois ; `evenements[tour]` est
--- l'événement distribué à ce tour (un simple timer sinon).
+-- l'événement distribué à ce tour (un simple timer sinon) ; `evenements` peut être une fonction du tour, appelée au
+-- moment du tour pour viser ce qui est alors à l'écran.
 local function lancer(m, tours, evenements, saboter)
   local presents = { colony_integrator = m.integrateur, me_bridge = m.pont, monitor = m.moniteur }
   peripheral = { find = function(type_voulu) return presents[type_voulu] end }
@@ -50,7 +51,9 @@ local function lancer(m, tours, evenements, saboter)
     local boucles = {}
     for i, fonction in ipairs({ ... }) do boucles[i] = coroutine.create(fonction) end
     for tour = 0, tours do
-      local evenement = (evenements or {})[tour] or { "colonie_affichage" }
+      local prevu
+      if type(evenements) == "function" then prevu = evenements(tour) else prevu = (evenements or {})[tour] end
+      local evenement = prevu or { "colonie_affichage" }
       for _, boucle in ipairs(boucles) do
         local ok, erreur = coroutine.resume(boucle, depaqueter(evenement))
         if not ok then error(erreur, 0) end
@@ -63,9 +66,45 @@ end
 local function colonne_onglet(cible, page)
   local largeur = cible.getSize()
   for x = 1, largeur do
-    if vues.page_touchee(cible, x, 2) == page then return x end
+    local action = vues.action_touchee(cible, { page = "resume", erreurs = {} }, x, 2)
+    if action and action.page == page then return x end
   end
   error("onglet introuvable : " .. page)
+end
+
+-- Toucher le texte `motif` tel qu'il est à l'écran au moment du tour.
+local function toucher_texte(m, motif)
+  local x, y = m.moniteur.chercher(motif)
+  if not x then error("introuvable à l'écran : " .. motif .. "\n" .. m.moniteur.texte()) end
+  return { "monitor_touch", "top", x + 1, y }
+end
+
+-- Deux huttes : Léa (pierre en manque, en stock) puis Bob (terre en manque, en stock).
+local function monde_chantiers()
+  local m = monde()
+  m.colonie.requetes = {}
+  m.colonie.batiments = {
+    { pos = { x = 1, y = 64, z = 0 }, type = "builder", level = 1, displayName = "Builder's Hut",
+      citizens = { { id = 1, name = "Lea" } } },
+    { pos = { x = 2, y = 64, z = 0 }, type = "builder", level = 3, displayName = "Builder's Hut",
+      citizens = { { id = 2, name = "Bob" } } },
+  }
+  m.colonie.ressources["1,64,0"] = { { item = { name = "minecraft:stone" }, displayName = "Stone", needs = 10,
+    available = 0, delivering = 0 } }
+  m.colonie.ressources["2,64,0"] = { { item = { name = "minecraft:dirt" }, displayName = "Dirt", needs = 64,
+    available = 0, delivering = 0 } }
+  m.etat_pont.stock["minecraft:stone"] = 100
+  m.etat_pont.stock["minecraft:dirt"] = 100
+  return m
+end
+
+-- Tour 1 : onglet Chantiers, tour 2 : sous-onglet de Bob, tour 3 : bouton de livraison.
+local function activer_bob(m)
+  return function(tour)
+    if tour == 1 then return { "monitor_touch", "top", colonne_onglet(m.moniteur, "chantiers"), 2 } end
+    if tour == 2 then return toucher_texte(m, " Bob ") end
+    if tour == 3 then return toucher_texte(m, "Livraison auto : NON") end
+  end
 end
 
 return {
@@ -155,6 +194,66 @@ return {
     verif.vrai(m.moniteur.chercher("redstone en panne"), "l'erreur doit être à l'écran")
     verif.egal(m.etat_pont.livre["minecraft:oak_planks"], 16)
     verif.vrai(m.disque.disque["colonie.log"]:find("redstone en panne", 1, true), "l'erreur doit être journalisée")
+  end,
+
+  chantiers_ne_sont_jamais_livres_sans_activation = function()
+    local m = monde_chantiers()
+    lancer(m, 4)
+    verif.egal(m.etat_pont.livre, {})
+  end,
+
+  toucher_onglet_sous_onglet_et_bouton_active_la_livraison_du_seul_constructeur_montre = function()
+    local m = monde_chantiers()
+    lancer(m, 5, activer_bob(m))
+    verif.egal(m.etat_pont.livre, { ["minecraft:dirt"] = 64 }, "Bob servi à la passe suivante, Léa jamais")
+    verif.vrai(m.moniteur.chercher("Livraison auto : OUI"))
+    verif.vrai(m.moniteur.chercher("Bob (niveau 3)"))
+    local enregistre = textutils.unserialize(m.disque.disque["colonie.cfg"])
+    verif.egal(enregistre.livraison_chantiers, { ["2,64,0"] = true })
+  end,
+
+  livraison_activee_est_retenue_au_redemarrage = function()
+    local m = monde_chantiers()
+    m.disque.disque["colonie.cfg"] = textutils.serialize({ livraison_chantiers = { ["2,64,0"] = true } })
+    lancer(m, 1)
+    verif.egal(m.etat_pont.livre, { ["minecraft:dirt"] = 64 })
+  end,
+
+  toucher_le_bouton_deux_fois_desactive_et_l_enregistre = function()
+    local m = monde_chantiers()
+    local activer = activer_bob(m)
+    lancer(m, 6, function(tour)
+      if tour == 4 then return toucher_texte(m, "Livraison auto : OUI") end
+      return activer(tour)
+    end)
+    verif.egal(textutils.unserialize(m.disque.disque["colonie.cfg"]).livraison_chantiers, {})
+  end,
+
+  bascule_avec_config_fautive_n_ecrase_pas_le_fichier_et_le_dit = function()
+    local m = monde_chantiers()
+    m.disque.disque["colonie.cfg"] = "{ pas du lua"
+    lancer(m, 5, activer_bob(m))
+    verif.egal(m.disque.disque["colonie.cfg"], "{ pas du lua")
+    verif.vrai(m.moniteur.chercher("non enregistr"), m.moniteur.texte())
+    verif.egal(m.etat_pont.livre, { ["minecraft:dirt"] = 64 }, "la bascule vaut quand même jusqu'au redémarrage")
+  end,
+
+  sans_pont_me_les_ressources_des_chantiers_restent_affichees = function()
+    local m = monde_chantiers()
+    m.pont = nil
+    lancer(m, 3, function(tour)
+      if tour == 1 then return { "monitor_touch", "top", colonne_onglet(m.moniteur, "chantiers"), 2 } end
+    end)
+    verif.vrai(m.moniteur.chercher("Stone"), m.moniteur.texte())
+  end,
+
+  chantiers_livres_quand_get_requests_leve = function()
+    local m = monde_chantiers()
+    m.disque.disque["colonie.cfg"] = textutils.serialize({ livraison_chantiers = { ["2,64,0"] = true } })
+    m.colonie.exceptions.getRequests = "Element Reference{minecraft:enchantment} is not valid in current registry set"
+    lancer(m, 1)
+    verif.egal(m.etat_pont.livre, { ["minecraft:dirt"] = 64 })
+    verif.vrai(m.moniteur.chercher("objet enchant"))
   end,
 
   motif_d_exclusion_invalide_est_signale_a_l_ecran = function()
