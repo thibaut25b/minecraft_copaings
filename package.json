@@ -4,7 +4,8 @@
   "description": "Programmes ComputerCraft (CC: Tweaked). Node ne sert qu'aux tests hors jeu.",
   "scripts": {
     "test": "node tests/lancer.js",
-    "verify": "node tests/lancer.js"
+    "verify": "node tests/lancer.js",
+    "apercu": "node outils/apercu.js"
   },
   "devDependencies": {
     "fengari": "^0.1.5"
