@@ -21,6 +21,10 @@ Le dépôt doit être public pour que `wget` atteigne les fichiers bruts, et `ht
 - `galerie` : écrans de démonstration animés (usine, colonie, trains, vitrine des briques) ; toucher le moniteur
   passe au suivant, Q quitte.
 - `casino` : casino de démonstration (machine à sous, roulette, crash, blackjack) au toucher, avec des jetons fictifs.
+- `usine` : tableau de bord et régulation d'une usine Create (stress, stocks du réseau logistique, lignes coupées et
+  relancées par relais redstone selon des seuils).
+- `boutique` : réassort, prix et suivi des ventes d'Item Traders de Lightman's Currency depuis le réseau logistique
+  Create.
 
 ## Jouer dans le navigateur
 

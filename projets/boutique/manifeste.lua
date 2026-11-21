@@ -1,0 +1,30 @@
+-- Manifeste de la boutique : `depot` = chemin dans le dépôt, `ordinateur` = chemin sans « / » initial en jeu.
+
+return {
+  nom = "boutique",
+  entree = "boutique/principal.lua",
+  config = "boutique.cfg",
+  fichiers = {
+    { depot = "commun/texte.lua", ordinateur = "commun/texte.lua" },
+    { depot = "commun/dessin.lua", ordinateur = "commun/dessin.lua" },
+    { depot = "commun/pixels.lua", ordinateur = "commun/pixels.lua" },
+    { depot = "commun/graphes.lua", ordinateur = "commun/graphes.lua" },
+    { depot = "commun/theme.lua", ordinateur = "commun/theme.lua" },
+    { depot = "commun/panneaux.lua", ordinateur = "commun/panneaux.lua" },
+    { depot = "commun/pagination.lua", ordinateur = "commun/pagination.lua" },
+    { depot = "commun/config.lua", ordinateur = "commun/config.lua" },
+    { depot = "commun/depot.lua", ordinateur = "commun/depot.lua" },
+    { depot = "commun/journal.lua", ordinateur = "commun/journal.lua" },
+    { depot = "commun/peripheriques.lua", ordinateur = "commun/peripheriques.lua" },
+    { depot = "commun/logistique.lua", ordinateur = "commun/logistique.lua" },
+    { depot = "projets/boutique/reglages.lua", ordinateur = "boutique/reglages.lua" },
+    { depot = "projets/boutique/offres.lua", ordinateur = "boutique/offres.lua" },
+    { depot = "projets/boutique/reassort.lua", ordinateur = "boutique/reassort.lua" },
+    { depot = "projets/boutique/prix.lua", ordinateur = "boutique/prix.lua" },
+    { depot = "projets/boutique/ventes.lua", ordinateur = "boutique/ventes.lua" },
+    { depot = "projets/boutique/passe.lua", ordinateur = "boutique/passe.lua" },
+    { depot = "projets/boutique/vues.lua", ordinateur = "boutique/vues.lua" },
+    { depot = "projets/boutique/diag.lua", ordinateur = "boutique/diag.lua" },
+    { depot = "projets/boutique/principal.lua", ordinateur = "boutique/principal.lua" },
+  },
+}
