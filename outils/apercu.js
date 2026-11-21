@@ -16,6 +16,7 @@ const ECHELLE_PNG = 2;
 const COLLECTIONS = [
   { nom: 'galerie', titre: 'Galerie ComputerCraft', liste: 'projets/galerie/ecrans.lua', dossier: 'projets/galerie/ecrans/', png: '' },
   { nom: 'colonie', titre: 'Tableau de bord de la colonie', liste: 'outils/apercus/colonie/ecrans.lua', dossier: '', png: 'colonie' },
+  { nom: 'casino', titre: 'Casino de démonstration', liste: 'outils/apercus/casino/ecrans.lua', dossier: '', png: 'casino' },
 ];
 
 // Géométrie de la police de CC : cases de 6x9 pixels, une case de l'atlas fait 8x11 (marge de 1 pixel), 16 colonnes.

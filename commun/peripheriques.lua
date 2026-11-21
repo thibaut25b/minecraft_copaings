@@ -3,7 +3,9 @@
 local peripheriques = {}
 
 --- Types CC des périphériques utilisés par les projets.
-peripheriques.TYPES = { integrateur = "colony_integrator", pont_me = "me_bridge", moniteur = "monitor" }
+peripheriques.TYPES = {
+  integrateur = "colony_integrator", pont_me = "me_bridge", moniteur = "monitor", haut_parleur = "speaker",
+}
 
 --- Renvoie le premier périphérique du type demandé (table de méthodes), ou nil s'il n'y en a pas.
 function peripheriques.trouver(type_voulu)

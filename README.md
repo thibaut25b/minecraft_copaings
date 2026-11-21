@@ -20,6 +20,7 @@ Le dépôt doit être public pour que `wget` atteigne les fichiers bruts, et `ht
 - `colonie` : fourniture automatique des requêtes de la colonie MineColonies depuis un réseau AE2, avec affichage.
 - `galerie` : écrans de démonstration animés (usine, colonie, trains, vitrine des briques) ; toucher le moniteur
   passe au suivant, Q quitte.
+- `casino` : casino de démonstration (machine à sous, roulette, crash) au toucher, avec des jetons fictifs.
 
 ## Tests
 
