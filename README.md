@@ -21,6 +21,11 @@ Le dépôt doit être public pour que `wget` atteigne les fichiers bruts, et `ht
 - `galerie` : écrans de démonstration animés (usine, colonie, trains, vitrine des briques) ; toucher le moniteur
   passe au suivant, Q quitte.
 
+## Jouer dans le navigateur
+
+`npm run jouer -- galerie` écrit `apercu/jouer-galerie.html` : ouvre-la, le vrai programme tourne sur un moniteur
+tactile émulé (clic = toucher, clavier transmis). Les fichiers écrits restent dans le navigateur (« Réinitialiser »).
+
 ## Tests
 
 Les tests tournent hors du jeu (Node et Fengari) :
