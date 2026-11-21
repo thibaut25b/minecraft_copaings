@@ -9,6 +9,8 @@ local NOMS_COULEURS = {
 local CHIFFRES = "0123456789abcdef"
 local LARGEUR_ECHANTILLON = 6
 local COLONNE_GAUCHE = 149 -- 128 + bits 1, 4 et 16 : colonne gauche allumée
+local IMAGES = 60
+local LARGEUR_MIN, HAUTEUR_MIN = 97, 24
 
 local function ecrire(cible, x, y, valeur, couleur, fond)
   cible.setCursorPos(x, y)
@@ -62,7 +64,7 @@ end
 
 local function dessiner_mobile(cible, t)
   local sous_colonnes = 2 * 40
-  local position = t % (2 * sous_colonnes - 2)
+  local position = math.floor((t % IMAGES) * (2 * sous_colonnes - 2) / IMAGES)
   if position >= sous_colonnes then position = 2 * sous_colonnes - 2 - position end
   local colonne = 46 + math.floor(position / 2)
   cible.setBackgroundColor(colors.gray)
@@ -79,16 +81,22 @@ local function dessiner_mobile(cible, t)
     cible.setBackgroundColor(colors.orange)
     cible.write(string.char(COLONNE_GAUCHE))
   end
-  ecrire(cible, 46, 22, "image " .. t, colors.lightGray)
+  ecrire(cible, 46, 22, "image " .. t % IMAGES, colors.lightGray)
 end
 
 return {
   nom = "mire",
   titre = "Mire de réglage",
-  images = 60,
+  images = IMAGES,
   dessiner = function(cible, t)
     cible.setBackgroundColor(colors.black)
     cible.clear()
+    local largeur, hauteur = cible.getSize()
+    if largeur < LARGEUR_MIN or hauteur < HAUTEUR_MIN then
+      local message = string.format("Mire : il faut %dx%d cases", LARGEUR_MIN, HAUTEUR_MIN)
+      ecrire(cible, 1, 1, message:sub(1, largeur), colors.white)
+      return
+    end
     ecrire(cible, 2, 2, texte.vers_cc("Mire de réglage : couleurs, texte, pseudo-pixels"), colors.white)
     dessiner_couleurs(cible)
     ecrire(cible, 2, 11, texte.vers_cc("Voilà l'été : garçon, île, où, ÉCOLE, ñ, ü, ½ ; ABC abc 0123 !?"), colors.cyan)
