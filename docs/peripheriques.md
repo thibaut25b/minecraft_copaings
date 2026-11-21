@@ -197,3 +197,7 @@ until id == t.getId() and (isErr or status == "JOB_DONE")
 - `getWorkOrderResources` sur commande non réclamée, `getBuilderResources` sur bâtiment absent ou non constructeur : `nil` probable, exception possible.
 - Item pour une pile vide ; sens exact des `matcher` ; unités de l'énergie et des capacités.
 - Fluides et chimiques (`getFluid*`, `exportFluid`...) non relevés. Doc embarquée (patchouli) non confrontée.
+
+## Bogues connus
+
+- `getRequests` lève `IllegalStateException: Element Reference{... minecraft:enchantment ...} is not valid in current registry set` tant qu'une requête ouverte porte un objet enchanté (constaté en jeu le 2026-11-21). Aucun contournement en Lua : l'appel entier échoue.

@@ -102,6 +102,17 @@ return {
     verif.egal(lecture.requetes(integrateur)[1].demandeur, "")
   end,
 
+  -- Non-régression : l'erreur brute du mod, coupée à l'écran, ne disait pas au joueur quoi faire.
+  requete_a_objet_enchante_donne_une_consigne_au_joueur = function()
+    local integrateur, etat = faux_integrateur.creer()
+    etat.exceptions.getRequests = "Java Exception Thrown: java.lang.IllegalStateException: Element Reference"
+      .. "{ResourceKey[minecraft:enchantment / minecraft:looting]=Enchantment Looting} is not valid in current registry set"
+    local liste, message = lecture.requetes(integrateur)
+    verif.egal(liste, nil)
+    verif.vrai(message:find("presse-papiers", 1, true), message)
+    verif.vrai(not message:find("IllegalStateException", 1, true), message)
+  end,
+
   requetes_illisibles_renvoient_nil_et_le_message = function()
     local integrateur, etat = faux_integrateur.creer()
     etat.exceptions.getRequests = "chunk déchargé"

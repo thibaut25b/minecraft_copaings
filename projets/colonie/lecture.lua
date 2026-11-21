@@ -108,12 +108,23 @@ function lecture.lire(integrateur)
   }
 end
 
+-- Advanced Peripherals 0.8.2a lève cette erreur dans `getRequests` dès qu'une requête ouverte porte un objet enchanté.
+local ERREUR_OBJET_ENCHANTE = "is not valid in current registry set"
+local AIDE_OBJET_ENCHANTE = "Requêtes bloquées par un objet enchanté (bogue d'Advanced Peripherals) : "
+  .. "sers ou annule la requête d'équipement dans le presse-papiers"
+
+local function message_requetes_illisibles(erreur)
+  local texte = tostring(erreur)
+  if texte:find(ERREUR_OBJET_ENCHANTE, 1, true) then return AIDE_OBJET_ENCHANTE end
+  return "Requêtes illisibles : " .. texte
+end
+
 --- Renvoie les requêtes normalisées de la colonie, ou `nil, message`. Des bâtiments illisibles laissent le demandeur vide.
 function lecture.requetes(integrateur)
   local ok, message = verifier_colonie(integrateur)
   if not ok then return nil, message end
   local lu, brutes = peripheriques.appel(integrateur, "getRequests")
-  if not lu or type(brutes) ~= "table" then return nil, "Requêtes illisibles : " .. tostring(brutes) end
+  if not lu or type(brutes) ~= "table" then return nil, message_requetes_illisibles(brutes) end
   return requetes.normaliser(brutes, lire(integrateur, "getBuildings", {}))
 end
 
