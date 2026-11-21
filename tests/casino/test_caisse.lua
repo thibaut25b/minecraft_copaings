@@ -32,7 +32,7 @@ return {
   fichier_illisible_rend_le_depart_et_le_signale = function()
     local c, _, probleme = caisse.ouvrir(depot_memoire(false), REGLES)
     verif.egal(c.solde(), 500)
-    verif.vrai(probleme and probleme:find("illisibles"), tostring(probleme))
+    verif.vrai(probleme and probleme:find("illisible"), tostring(probleme))
     local negatif = caisse.ouvrir(depot_memoire({ solde = -5 }), REGLES)
     verif.egal(negatif.solde(), 500)
   end,

@@ -39,6 +39,11 @@ function crash.gain(mise, centiemes)
   return math.floor(mise * centiemes / 100)
 end
 
+--- Gain net maximal d'un tour à `mise` (encaissé au plafond, mise déduite) : base de la solvabilité.
+function crash.exposition(mise)
+  return crash.gain(mise, crash.PLAFOND) - mise
+end
+
 --- Le joueur qui encaisse à `centiemes` gagne si le point d'explosion est au-dessus.
 function crash.gagne(centiemes, point)
   return centiemes < point

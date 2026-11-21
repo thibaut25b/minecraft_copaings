@@ -19,7 +19,9 @@ return {
     { depot = "projets/casino/jeux/roulette.lua", ordinateur = "casino/jeux/roulette.lua" },
     { depot = "projets/casino/jeux/crash.lua", ordinateur = "casino/jeux/crash.lua" },
     { depot = "projets/casino/jeux/blackjack.lua", ordinateur = "casino/jeux/blackjack.lua" },
+    { depot = "projets/casino/monnaie.lua", ordinateur = "casino/monnaie.lua" },
     { depot = "projets/casino/caisse.lua", ordinateur = "casino/caisse.lua" },
+    { depot = "projets/casino/banque.lua", ordinateur = "casino/banque.lua" },
     { depot = "projets/casino/depot.lua", ordinateur = "casino/depot.lua" },
     { depot = "projets/casino/son.lua", ordinateur = "casino/son.lua" },
     { depot = "projets/casino/session.lua", ordinateur = "casino/session.lua" },
@@ -32,5 +34,6 @@ return {
     { depot = "projets/casino/vues/blackjack.lua", ordinateur = "casino/vues/blackjack.lua" },
     { depot = "projets/casino/vues.lua", ordinateur = "casino/vues.lua" },
     { depot = "projets/casino/principal.lua", ordinateur = "casino/principal.lua" },
+    { depot = "projets/casino/diag.lua", ordinateur = "casino/diag.lua" },
   },
 }

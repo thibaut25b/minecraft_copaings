@@ -67,6 +67,13 @@ function machine.gain(arrets, mise)
   return ligne and mise * ligne.multiplicateur or 0
 end
 
+--- Gain net maximal d'un tour à `mise` (la plus grosse ligne de la table, mise déduite) : base de la solvabilité.
+function machine.exposition(mise)
+  local plus_gros = 0
+  for _, ligne in ipairs(machine.TABLE) do plus_gros = math.max(plus_gros, ligne.multiplicateur) end
+  return mise * (plus_gros - 1)
+end
+
 -- Taux de retour, calculé une fois.
 local retour_calcule
 

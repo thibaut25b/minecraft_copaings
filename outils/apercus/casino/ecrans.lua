@@ -15,23 +15,40 @@ local function arret(symbole)
   end
 end
 
--- Joue `etapes` (actions, attentes) sur une session neuve ; renvoie l'état et l'instant final.
--- Une étape : { action } pour agir, { attendre = secondes } pour avancer le temps.
 local COULEURS = { "pique", "coeur", "carreau", "trefle" }
 
-local function jouer(etapes, tirages, solde)
+-- Vraie monnaie de l'aperçu : pièces par défaut, valeurs de Lightman's Currency, réserve de valeur donnée.
+local VALEURS = {}
+for i, piece in ipairs(defauts.pieces) do VALEURS[piece.id] = 10 ^ (i - 1) end
+local function banque(reserve, probleme)
+  return { pret = probleme == nil, probleme = probleme, reserve = reserve, valeurs = VALEURS, pieces = defauts.pieces }
+end
+local MANQUE = "réserve « minecraft:chest_2 » introuvable. Visibles : minecraft:chest_0 (minecraft:chest), "
+  .. "minecraft:chest_1 (minecraft:chest), monitor_0 (monitor)"
+
+-- Joue `etapes` sur une session neuve ; renvoie l'état et l'instant final. Une étape : { action } pour agir,
+-- { attendre = secondes } pour avancer le temps, { sabot = rangs } pour fixer le sabot, { message, ton } pour un
+-- message. `monnaie` (facultatif) : banque de la vraie monnaie, qui couvre aussi les mises.
+local function jouer(etapes, tirages, solde, monnaie)
   local d = { contenu = { solde = solde or 1250 } }
   d.lire = function() return d.contenu end
   d.ecrire = function(etat) d.contenu = etat; return true end
-  local c = caisse.ouvrir(d, { depart = defauts.jetons_depart, recharge = defauts.recharge })
+  local regles = { depart = defauts.jetons_depart, recharge = defauts.recharge }
+  if monnaie then
+    regles = { depart = 0, recharge = 0, unite = "crédit", couverture = function() return monnaie.reserve end }
+  end
+  local c = caisse.ouvrir(d, regles)
   local indice = 0
   local ctx = { caisse = c, maintenant = 100, inactivite = defauts.inactivite, hasard = function()
     indice = indice + 1
     return (tirages or {})[indice] or 1
   end }
   local etat = session.nouvelle(defauts, c.solde())
+  if monnaie then etat.monnaie, etat.unite = monnaie, "crédit" end
   for _, etape in ipairs(etapes) do
-    if etape.sabot then
+    if etape.message then
+      session.avertir(etat, etape.message, etape.ton, ctx.maintenant)
+    elseif etape.sabot then
       local cartes = {}
       for i, rang in ipairs(etape.sabot) do cartes[i] = { rang = rang, couleur = COULEURS[i % 4 + 1] } end
       etat.blackjack.sabot = { cartes = cartes, position = 1 }
@@ -46,11 +63,11 @@ local function jouer(etapes, tirages, solde)
   return etat, ctx.maintenant
 end
 
-local function ecran(nom, titre, largeur, hauteur, etapes, tirages, solde)
+local function ecran(nom, titre, largeur, hauteur, etapes, tirages, solde, monnaie)
   return {
     nom = nom, titre = titre, largeur = largeur, hauteur = hauteur, images = 1,
     dessiner = function(cible)
-      local etat, maintenant = jouer(etapes, tirages, solde)
+      local etat, maintenant = jouer(etapes, tirages, solde, monnaie)
       theme.appliquer(cible, "nuit")
       vues.dessiner(cible, etat, maintenant)
     end,
@@ -129,5 +146,24 @@ ecrans[#ecrans + 1] = ecran("bj_main_164x81", "Blackjack, très grand moniteur",
   { sabot = { 5, 10, 4, 7, 3 } }, JOUER, { attendre = 2 }, { type = "tirer" }, { attendre = 1 } })
 ecrans[#ecrans + 1] = ecran("roulette_164x81", "Roulette, très grand moniteur", 164, 81, MISES_ROULETTE)
 ecrans[#ecrans + 1] = ecran("trop_petit", "Moniteur trop petit (39x13)", 39, 13, {})
+
+-- Vraie monnaie : hall, dépôt, encaissement, mise refusée faute de réserve, inventaire manquant.
+for _, taille in ipairs({ { 100, 38 }, { 51, 19 } }) do
+  local l, h = taille[1], taille[2]
+  local s = "_" .. l .. "x" .. h
+  local monnaie_cas = {
+    { "monnaie_hall", "Monnaie : hall", {}, 1250, banque(48250) },
+    { "monnaie_depot", "Monnaie : dépôt crédité", { { message = "+300 crédits déposés.", ton = "bon" } }, 1550,
+      banque(48550) },
+    { "monnaie_encaisse", "Monnaie : encaissement", { { message = "1 250 crédits versés dans le coffre de sortie.",
+      ton = "bon" } }, 0, banque(47000) },
+    { "monnaie_refus", "Monnaie : mise refusée, réserve insuffisante", { ouvrir("machine"), MISE_PLUS, MISE_PLUS,
+      JOUER }, 1250, banque(3000) },
+    { "monnaie_manque", "Monnaie : réserve introuvable", { ouvrir("machine") }, 1250, banque(nil, MANQUE) },
+  }
+  for _, c in ipairs(monnaie_cas) do
+    ecrans[#ecrans + 1] = ecran(c[1] .. s, c[2] .. " (" .. l .. "x" .. h .. ")", l, h, c[3], {}, c[4], c[5])
+  end
+end
 
 return ecrans

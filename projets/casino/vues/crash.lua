@@ -125,10 +125,10 @@ local function statut(etat, maintenant)
       court = "Encaisser : " .. panneaux.milliers(gain), couleur = R.moyen }
   end
   if jeu.phase == "explose" then
-    return base.statut_resultat(jeu.resultat, "Explosion à " .. crash.texte(jeu.point), etat.solde)
+    return base.statut_resultat(jeu.resultat, "Explosion à " .. crash.texte(jeu.point), etat)
   end
   if jeu.phase == "encaisse" then
-    local resultat = base.statut_resultat(jeu.resultat, "Encaissé à " .. crash.texte(jeu.atteint), etat.solde)
+    local resultat = base.statut_resultat(jeu.resultat, "Encaissé à " .. crash.texte(jeu.atteint), etat)
     if jeu.point > jeu.atteint then
       local prevue = " Explosion prévue à " .. crash.texte(jeu.point) .. "."
       resultat.texte, resultat.court = resultat.texte .. prevue, resultat.court .. prevue

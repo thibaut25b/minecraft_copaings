@@ -6,6 +6,7 @@ local pixels = require("commun.pixels")
 local texte = require("commun.texte")
 local theme = require("commun.theme")
 local session = require("casino.session")
+local monnaie = require("casino.monnaie")
 
 local R = theme.ROLES
 
@@ -156,12 +157,14 @@ end
 function base.boutons_jeu(etat, nom_mise, autres, principal)
   local bloque = session.en_cours(etat)
   local valeur = panneaux.milliers(etat.mise)
+  local plafonds = session.mises_max(etat)
   local liste = {
     { cle = "hall", libelle = "< Hall", court = "<", action = { type = "hall" }, inactif = bloque },
     { cle = "moins", libelle = "-", action = { type = "mise", pas = -1 },
       inactif = bloque or etat.mise <= etat.paliers[1] },
     { cle = "mise", libelle = nom_mise .. " " .. valeur, court = valeur, style = "affichage",
-      couleur = etat.mise > etat.solde and R.mauvais or R.moyen },
+      couleur = (etat.mise > etat.solde or (plafonds and etat.mise > (plafonds[etat.ecran] or 0))) and R.mauvais
+        or R.moyen },
     { cle = "plus", libelle = "+", action = { type = "mise", pas = 1 },
       inactif = bloque or etat.mise >= etat.paliers[#etat.paliers] },
     { cle = "regles", libelle = "Règles", court = "?", action = { type = "regles" }, inactif = bloque },
@@ -191,32 +194,52 @@ end
 
 --- Bandeau d'un écran : titre, mention de démo, solde à droite.
 function base.bandeau(cible, largeur, titre, etat)
+  local segments = {}
+  local plafonds = session.mises_max(etat)
+  if plafonds and plafonds[etat.ecran] then
+    segments[1] = { "Mise max " .. texte.milliers(plafonds[etat.ecran]), R.discret }
+  end
   local mention = largeur >= 70 and "démo, jetons fictifs" or "démo"
-  panneaux.bandeau(cible, titre, mention, { { "Solde " .. panneaux.milliers(etat.solde), R.moyen } })
+  if etat.monnaie then mention = largeur >= 70 and "pièces réelles" or nil end
+  segments[#segments + 1] = { (etat.monnaie and "Crédits " or "Solde ") .. texte.milliers(etat.solde), R.moyen }
+  panneaux.bandeau(cible, titre, mention, segments)
 end
 
---- Ligne de message : le message en cours s'il y en a un, sinon `statut` { texte, court, couleur } du jeu.
+--- Équivalent en pièces d'un montant en vraie monnaie (« 1 or 5 fer »), ou nil avec les jetons fictifs.
+function base.en_pieces(etat, montant)
+  if not etat.monnaie or not etat.monnaie.valeurs then return nil end
+  return monnaie.decrire(montant, etat.monnaie.pieces, etat.monnaie.valeurs)
+end
+
+--- Ligne de message : jeu suspendu (vraie monnaie), sinon le message en cours, sinon `statut` { texte, court,
+--- couleur } du jeu.
 function base.message(cible, plan, etat, statut, maintenant)
   local message = etat.message
-  local texte, court, couleur = statut.texte, statut.court, statut.couleur
-  if message and maintenant < message.fin then texte, court, couleur = message.texte, nil, TONS[message.ton] end
-  base.centrer(cible, 1, plan.ligne_message, plan.largeur, base.choisir(texte, court, plan.largeur), couleur, R.fond)
+  local texte_ligne, court, couleur = statut.texte, statut.court, statut.couleur
+  if message and maintenant < message.fin then texte_ligne, court, couleur = message.texte, nil, TONS[message.ton] end
+  if etat.monnaie and not etat.monnaie.pret then
+    texte_ligne, couleur = "Jeu suspendu : " .. etat.monnaie.probleme, R.mauvais
+    court = etat.ecran == "hall" and "Jeux suspendus en attendant la banque." or "Jeu suspendu : voir le hall."
+  end
+  base.centrer(cible, 1, plan.ligne_message, plan.largeur, base.choisir(texte_ligne, court, plan.largeur), couleur,
+    R.fond)
 end
 
---- Statut d'un tour réglé : gain, mise rendue ou perte, avec le nouveau solde.
-function base.statut_resultat(resultat, libelle, solde)
-  local gain, mise = resultat.gain, resultat.mise
-  local milliers, quantite = texte.milliers, texte.quantite
+--- Statut d'un tour réglé : gain, mise rendue ou perte, avec le nouveau solde (et son équivalent en pièces).
+function base.statut_resultat(resultat, libelle, etat)
+  local gain, mise, unite = resultat.gain, resultat.mise, etat.unite
+  local solde = texte.milliers(etat.solde)
+  local pieces = base.en_pieces(etat, gain)
   if gain > mise then
-    return { texte = string.format("%s : gagné %s ! Solde %s.", libelle, quantite(gain, "jeton"), milliers(solde)),
-      court = "Gagné " .. quantite(gain, "jeton") .. " !", couleur = R.bon }
+    return { texte = string.format("%s : gagné %s%s ! Solde %s.", libelle, texte.quantite(gain, unite),
+      pieces and " (" .. pieces .. ")" or "", solde), court = "Gagné " .. texte.quantite(gain, unite) .. " !",
+      couleur = R.bon }
   end
   if gain == mise then
-    return { texte = libelle .. " : mise rendue. Solde " .. milliers(solde) .. ".", court = "Mise rendue.",
-      couleur = R.info }
+    return { texte = libelle .. " : mise rendue. Solde " .. solde .. ".", court = "Mise rendue.", couleur = R.info }
   end
-  return { texte = string.format("%s : perdu %s. Solde %s.", libelle, quantite(mise - gain, "jeton"), milliers(solde)),
-    court = "Perdu " .. quantite(mise - gain, "jeton") .. ".", couleur = R.mauvais }
+  return { texte = string.format("%s : perdu %s. Solde %s.", libelle, texte.quantite(mise - gain, unite), solde),
+    court = "Perdu " .. texte.quantite(mise - gain, unite) .. ".", couleur = R.mauvais }
 end
 
 --- Mise en page de l'écran des règles : un seul bouton pour revenir au jeu.

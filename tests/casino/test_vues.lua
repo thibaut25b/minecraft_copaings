@@ -52,6 +52,21 @@ local function suite(a, b)
   return l
 end
 
+local PIECES = { { id = "a", nom = "cuivre" }, { id = "b", nom = "fer" }, { id = "c", nom = "or" },
+  { id = "d", nom = "émeraude" } }
+local MONNAIES = {
+  pret = { pret = true, reserve = 15000, valeurs = { a = 1, b = 10, c = 100, d = 1000 }, pieces = PIECES },
+  suspendu = { pret = false, pieces = PIECES, probleme = "réserve « minecraft:chest_2 » introuvable. Visibles : "
+    .. "minecraft:chest_0 (minecraft:chest), minecraft:chest_1 (minecraft:chest), left (monitor)" },
+}
+
+-- État joué du cas `cas` : { nom, étapes, tirages, solde, monnaie (clé de MONNAIES, facultative) }.
+local function etat_du_cas(cas)
+  local etat, maintenant = jouer(cas[2], cas[3], cas[4])
+  if cas[5] then etat.monnaie, etat.unite = MONNAIES[cas[5]], "crédit" end
+  return etat, maintenant
+end
+
 local ETATS = {
   { "hall", {} },
   { "hall record", { ouvrir("machine"), JOUER, { attendre = 3 }, { type = "hall" } }, { SEPT, SEPT, SEPT } },
@@ -76,6 +91,11 @@ local ETATS = {
   { "blackjack règles", { ouvrir("blackjack"), { type = "regles" } } },
   { "refus", { ouvrir("machine"), { type = "mise", pas = 5 }, JOUER }, {}, 3 },
   { "gros solde", { ouvrir("machine") }, {}, 123456789 },
+  { "hall monnaie", {}, {}, 1250, "pret" },
+  { "hall suspendu", {}, {}, 0, "suspendu" },
+  { "machine monnaie", { ouvrir("machine") }, {}, 1250, "pret" },
+  { "blackjack monnaie", { ouvrir("blackjack"), JOUER, { attendre = 6 }, { type = "rester" }, { attendre = 6 } }, {},
+    1250, "pret" },
 }
 
 -- Milieu de la dernière occurrence du texte `motif` à l'écran : les boutons sont en bas, sous les messages qui
@@ -98,7 +118,7 @@ end
 return {
   aucun_debordement_dans_chaque_etat_et_chaque_taille = function()
     for _, cas in ipairs(ETATS) do
-      local etat, maintenant = jouer(cas[2], cas[3], cas[4])
+      local etat, maintenant = etat_du_cas(cas)
       for _, taille in ipairs(TAILLES) do
         local c = cible_comptable.nouvelle(taille[1], taille[2])
         vues.dessiner(c, etat, maintenant)
@@ -109,7 +129,7 @@ return {
 
   zones_dans_l_ecran_sans_chevauchement_et_assez_grandes = function()
     for _, cas in ipairs(ETATS) do
-      local etat = jouer(cas[2], cas[3], cas[4])
+      local etat = etat_du_cas(cas)
       for _, taille in ipairs(TAILLES) do
         local zones = vues.disposer(taille[1], taille[2], etat).zones
         local nom = string.format("%s en %dx%d", cas[1], taille[1], taille[2])

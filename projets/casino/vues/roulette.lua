@@ -158,7 +158,7 @@ local function statut(etat)
   if jeu.phase == "tourne" then return { texte = "La bille roule...", couleur = R.discret } end
   if jeu.phase == "fini" and jeu.resultat then
     local couleur = roulette.couleur(jeu.numero)
-    return base.statut_resultat(jeu.resultat, "Sorti : " .. jeu.numero .. " " .. couleur, etat.solde)
+    return base.statut_resultat(jeu.resultat, "Sorti : " .. jeu.numero .. " " .. couleur, etat)
   end
   local total, cases = 0, 0
   for _, montant in pairs(jeu.mises) do

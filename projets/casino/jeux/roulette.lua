@@ -91,6 +91,13 @@ function roulette.total(mises)
   return total
 end
 
+--- Gain net maximal des `mises` (le numéro qui paie le plus, mises déduites) : base de la solvabilité.
+function roulette.exposition(mises)
+  local pire = 0
+  for _, numero in ipairs(roulette.ROUE) do pire = math.max(pire, roulette.gain(mises, numero)) end
+  return pire - roulette.total(mises)
+end
+
 --- Tire le numéro sorti avec `hasard(n)`, entier uniforme de 1 à n.
 function roulette.tirer(hasard)
   return hasard(#roulette.ROUE) - 1

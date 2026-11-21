@@ -86,6 +86,13 @@ function blackjack.regler(joueur, banque, mise)
   return mise, "egalite"
 end
 
+--- Gain net maximal d'une main à `mise` : main doublée gagnée (2 x mise engagée) ou blackjack naturel, mises
+--- déduites. Base de la solvabilité : le doublement est couvert dès la donne.
+function blackjack.exposition(mise)
+  local naturel = math.floor(mise * blackjack.NATUREL[1] / blackjack.NATUREL[2]) - mise
+  return math.max(2 * (2 * mise) - 2 * mise, naturel)
+end
+
 --- Gain si le joueur reste maintenant : la banque joue avec les cartes du sabot, sans le faire avancer.
 function blackjack.gain_si_reste(joueur, banque, sabot, mise)
   if blackjack.valeur(joueur) > 21 or blackjack.naturel(joueur) or blackjack.naturel(banque) then

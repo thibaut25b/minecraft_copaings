@@ -12,6 +12,22 @@ function peripheriques.trouver(type_voulu)
   return (peripheral.find(type_voulu))
 end
 
+--- Périphérique de nom `nom` (côté ou nom réseau d'un modem), ou nil s'il n'est pas visible.
+function peripheriques.par_nom(nom)
+  if type(nom) ~= "string" or nom == "" then return nil end
+  return peripheral.wrap(nom)
+end
+
+--- Noms de tous les périphériques visibles, triés, avec leur type : « minecraft:chest_0 (minecraft:chest) ».
+function peripheriques.visibles()
+  local liste = {}
+  for _, nom in ipairs(peripheral.getNames()) do
+    liste[#liste + 1] = nom .. " (" .. tostring(peripheral.getType(nom)) .. ")"
+  end
+  table.sort(liste)
+  return liste
+end
+
 --- Appelle `objet[methode](...)` sans jamais lever d'erreur.
 -- Renvoie `true, résultats...` si l'appel aboutit, `false, message` sinon (objet absent, méthode absente, erreur Lua).
 function peripheriques.appel(objet, methode, ...)

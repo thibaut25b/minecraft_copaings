@@ -6,6 +6,7 @@ local crash = require("casino.jeux.crash")
 local blackjack = require("casino.jeux.blackjack")
 
 local texte = require("commun.texte")
+local monnaie = require("casino.monnaie")
 
 local session = {}
 
@@ -56,11 +57,23 @@ function session.corriger(reglages, defauts, themes)
   for cle, defaut in pairs(defauts) do
     if type(reglages[cle]) ~= type(defaut) then remettre(cle, "invalide") end
   end
-  for _, cle in ipairs({ "mise_min", "mise_max", "mise_defaut", "jetons_depart", "recharge", "jeux_blackjack" }) do
+  for _, cle in ipairs({ "mise_min", "mise_max", "mise_defaut", "jetons_depart", "recharge", "jeux_blackjack",
+    "mise_min_monnaie", "mise_max_monnaie", "mise_defaut_monnaie" }) do
     local valeur = reglages[cle]
     if valeur ~= math.floor(valeur) or valeur < 1 then remettre(cle, "doit être un entier positif") end
   end
-  for _, cle in ipairs({ "inactivite", "periode_image" }) do
+  if reglages.mode ~= "demo" and reglages.mode ~= "monnaie" then remettre("mode", "doit valoir demo ou monnaie") end
+  for _, piece in ipairs(reglages.pieces) do
+    if type(piece) ~= "table" or type(piece.id) ~= "string" or type(piece.nom) ~= "string" then
+      remettre("pieces", "doit lister des { id, nom }")
+      break
+    end
+  end
+  if reglages.mise_max_monnaie < reglages.mise_min_monnaie then
+    remettre("mise_min_monnaie", "dépasse mise_max_monnaie")
+    remettre("mise_max_monnaie", "est sous mise_min_monnaie")
+  end
+  for _, cle in ipairs({ "inactivite", "periode_image", "periode_depot", "periode_valeurs" }) do
     if reglages[cle] <= 0 then remettre(cle, "doit être positif") end
   end
   if reglages.mise_max < reglages.mise_min then
@@ -91,12 +104,30 @@ function session.nouvelle(reglages, solde)
   end
   return {
     ecran = "hall", solde = solde, record = 0, paliers = paliers, mise = mise, mise_max = reglages.mise_max,
-    recharge = reglages.recharge, jeux_blackjack = reglages.jeux_blackjack, regles = false, sons = {}, geste = 0,
+    recharge = reglages.recharge, unite = reglages.mode == "monnaie" and "crédit" or "jeton",
+    jeux_blackjack = reglages.jeux_blackjack, regles = false, sons = {}, geste = 0,
     machine = { phase = "attente", arrets = { 13, 6, 9 } },
     roulette = { phase = "attente", mises = {}, historique = {}, position = 0 },
     crash = { phase = "attente", historique = {} },
     blackjack = { phase = "attente", joueur = {}, banque = {} },
   }
+end
+
+-- Gain net maximal d'un tour pour un crédit misé, par jeu (une mise pleine à la roulette).
+local EXPOSITIONS = {
+  machine = machine.exposition(1), roulette = roulette.exposition({ n0 = 1 }), crash = crash.exposition(1),
+  blackjack = blackjack.exposition(1),
+}
+
+--- En vraie monnaie (`etat.monnaie` = { pret, probleme, reserve, ... }), plus grande mise que la réserve couvre,
+--- par jeu ; nil avec les jetons fictifs.
+function session.mises_max(etat)
+  if not etat.monnaie then return nil end
+  local plafonds = {}
+  for jeu, exposition in pairs(EXPOSITIONS) do
+    plafonds[jeu] = etat.monnaie.pret and monnaie.mise_max(etat.monnaie.reserve, etat.solde, exposition) or 0
+  end
+  return plafonds
 end
 
 --- Vrai si un tour est en train de se jouer.
@@ -132,10 +163,15 @@ local function noter(historique, valeur)
   historique[session.HISTORIQUE + 1] = nil
 end
 
-local function miser(etat, contexte, montant, gain_prevu)
-  local ok, raison = contexte.caisse.miser(montant, gain_prevu)
+-- Mise du jeu courant : `exposition` est le gain net maximal du tour, contrôlé par la caisse en vraie monnaie.
+local function miser(etat, contexte, montant, gain_prevu, exposition)
+  local ok, raison = contexte.caisse.miser(montant, gain_prevu, exposition)
   etat.solde = contexte.caisse.solde()
   if not ok then
+    local plafonds = session.mises_max(etat)
+    if plafonds and montant <= etat.solde then
+      raison = raison .. " Mise max : " .. texte.milliers(plafonds[etat.ecran]) .. "."
+    end
     refuser(etat, raison, contexte.maintenant)
     return false
   end
@@ -161,7 +197,7 @@ local function jouer_machine(etat, contexte)
   local jeu = etat.machine
   local arrets = machine.tirer(contexte.hasard)
   local gain = machine.gain(arrets, etat.mise)
-  if not miser(etat, contexte, etat.mise, gain) then return end
+  if not miser(etat, contexte, etat.mise, gain, machine.exposition(etat.mise)) then return end
   local taille = #machine.BANDE
   jeu.depart, jeu.distance = {}, {}
   for i = 1, 3 do
@@ -195,7 +231,7 @@ local function poser_jeton(etat, contexte, cle)
     return refuser(etat, "Solde insuffisant pour un jeton de plus.", contexte.maintenant)
   end
   if (jeu.mises[cle] or 0) + etat.mise > etat.mise_max then
-    return refuser(etat, "Mise maximale par case : " .. texte.quantite(etat.mise_max, "jeton") .. ".", contexte.maintenant)
+    return refuser(etat, "Mise maximale par case : " .. texte.quantite(etat.mise_max, etat.unite) .. ".", contexte.maintenant)
   end
   jeu.mises[cle] = (jeu.mises[cle] or 0) + etat.mise
   jeu.phase, jeu.fete = "attente", nil
@@ -208,7 +244,7 @@ local function jouer_roulette(etat, contexte)
   if total == 0 then return refuser(etat, "Pose d'abord des jetons sur le tapis.", contexte.maintenant) end
   local numero = roulette.tirer(contexte.hasard)
   local gain = roulette.gain(jeu.mises, numero)
-  if not miser(etat, contexte, total, gain) then return end
+  if not miser(etat, contexte, total, gain, roulette.exposition(jeu.mises)) then return end
   local taille = #roulette.ROUE
   jeu.depart = jeu.position
   jeu.distance = (roulette.indice(numero) - jeu.position) % taille + taille * session.TOURS_ROULETTE
@@ -229,7 +265,9 @@ end
 local function jouer_crash(etat, contexte)
   local jeu = etat.crash
   local point = crash.point(contexte.hasard)
-  if not miser(etat, contexte, etat.mise, crash.gain_sans_geste(etat.mise, point)) then return end
+  if not miser(etat, contexte, etat.mise, crash.gain_sans_geste(etat.mise, point), crash.exposition(etat.mise)) then
+    return
+  end
   jeu.phase, jeu.debut, jeu.point, jeu.mise = "monte", contexte.maintenant, point, etat.mise
   jeu.atteint, jeu.resultat, jeu.fete = nil, nil, nil
 end
@@ -303,7 +341,8 @@ local function jouer_blackjack(etat, contexte)
   local cartes = {}
   for i = 1, 4 do cartes[i] = blackjack.tirer(sabot) end
   local joueur, banque = { cartes[1], cartes[3] }, { cartes[2], cartes[4] }
-  if not miser(etat, contexte, etat.mise, blackjack.gain_si_reste(joueur, banque, sabot, etat.mise)) then
+  if not miser(etat, contexte, etat.mise, blackjack.gain_si_reste(joueur, banque, sabot, etat.mise),
+    blackjack.exposition(etat.mise)) then
     sabot.position = depart
     return
   end
@@ -384,7 +423,7 @@ local function recharger(etat, contexte)
   local ok, resultat = contexte.caisse.recharger()
   etat.solde = contexte.caisse.solde()
   if not ok then return refuser(etat, resultat, contexte.maintenant) end
-  session.avertir(etat, "+" .. texte.quantite(resultat, "jeton") .. " fictifs ajoutés.", "bon", contexte.maintenant)
+  session.avertir(etat, "+" .. texte.quantite(resultat, etat.unite) .. " fictifs ajoutés.", "bon", contexte.maintenant)
   sonner(etat, "gain")
 end
 
@@ -396,6 +435,7 @@ function session.agir(etat, action, contexte)
   etat.appui = { cle = action.cle, fin = maintenant + session.DUREE_APPUI }
   local genre, libre = action.type, not session.en_cours(etat)
   if genre == "ouvrir" then
+    if etat.monnaie and not etat.monnaie.pret then return refuser(etat, etat.monnaie.probleme, maintenant) end
     etat.ecran, etat.regles = action.jeu, false
   elseif genre == "hall" then
     if libre then etat.ecran, etat.regles = "hall", false end

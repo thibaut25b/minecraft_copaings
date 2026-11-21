@@ -131,7 +131,7 @@ local function statut(etat)
   end
   if jeu.phase == "fini" and jeu.resultat then
     local libelle = ISSUES[jeu.issue](blackjack.valeur(jeu.joueur), blackjack.valeur(jeu.banque))
-    return base.statut_resultat(jeu.resultat, libelle, etat.solde)
+    return base.statut_resultat(jeu.resultat, libelle, etat)
   end
   return { texte = "Choisis ta mise, puis DISTRIBUER.", court = "Mise, puis JOUER.", couleur = R.discret }
 end

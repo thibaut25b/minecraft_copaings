@@ -104,7 +104,7 @@ local function statut(etat)
     return { texte = "Choisis ta mise, puis touche JOUER.", court = "Mise, puis JOUER.", couleur = R.discret }
   end
   return base.statut_resultat(jeu.resultat, jeu.combinaison and machine.libelle(jeu.combinaison) or "Rien",
-    etat.solde)
+    etat)
 end
 
 --- Dessine la machine à l'instant `maintenant`.
