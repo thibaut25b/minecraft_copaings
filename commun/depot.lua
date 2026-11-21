@@ -1,4 +1,4 @@
--- Dépôt du solde : l'état de la caisse dans un fichier de l'ordinateur, écrit sans risque de troncature, relu au
+-- Dépôt d'état : une table gardée dans un fichier de l'ordinateur, écrit sans risque de troncature, relu au
 -- démarrage ; un fichier illisible est mis de côté, jamais écrasé.
 
 local depot = {}

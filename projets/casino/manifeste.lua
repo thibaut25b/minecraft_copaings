@@ -22,7 +22,7 @@ return {
     { depot = "projets/casino/monnaie.lua", ordinateur = "casino/monnaie.lua" },
     { depot = "projets/casino/caisse.lua", ordinateur = "casino/caisse.lua" },
     { depot = "projets/casino/banque.lua", ordinateur = "casino/banque.lua" },
-    { depot = "projets/casino/depot.lua", ordinateur = "casino/depot.lua" },
+    { depot = "commun/depot.lua", ordinateur = "commun/depot.lua" },
     { depot = "projets/casino/son.lua", ordinateur = "casino/son.lua" },
     { depot = "projets/casino/session.lua", ordinateur = "casino/session.lua" },
     { depot = "projets/casino/vues/base.lua", ordinateur = "casino/vues/base.lua" },
