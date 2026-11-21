@@ -8,9 +8,11 @@ local HUTTE = { pos = { x = 10, y = 64, z = -3 }, type = "builder", level = 2, d
 
 local function peupler(etat)
   etat.citoyens = {
-    { id = 1, name = "Léa", job = "minecolonies:builder", state = "Working", health = 18, maxHealth = 20,
+    -- Comme le mod : pas de clé `job` sur le citoyen, elle est dans `workBuilding`.
+    { id = 1, name = "Léa", state = "Working", health = 18, maxHealth = 20,
       homeBuilding = { pos = { x = 0, y = 64, z = 0 }, type = "residence", level = 1, displayName = "Residence" },
-      workBuilding = HUTTE },
+      workBuilding = { pos = HUTTE.pos, type = "builder", level = 2, displayName = "Builder's Hut",
+                       job = "minecolonies:builder" } },
     { id = 2, name = "Tom", state = "Idle" },
   }
   etat.visiteurs = { { id = 9, name = "Ana" } }

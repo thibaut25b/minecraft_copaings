@@ -48,8 +48,8 @@ Noms d'énumération = `name()` Java.
 
 - `id` number, `uuid` string, `name` string, `isChild` boolean, `gender` `"female"|"male"`, `saturation` number, `happiness` number.
 - `skills` : `{[NOM_SKILL]={level=number,xp=number}}`. `disease` : string id (si malade).
-- `pos` pos, `bedPos` pos (peut manquer). `job` : string id, ex. `minecolonies:builder` (si job). `jobStatus` : string (`JobStatus.name`).
-- `homeBuilding`, `workBuilding` : bâtiment de base `{pos,type,level,displayName}` (si assigné).
+- `pos` pos, `bedPos` pos (peut manquer). Pas de clé `job` sur le citoyen. `jobStatus` : string (`JobStatus.name`).
+- `homeBuilding` : bâtiment complet (comme `getBuildings`), si logé. `workBuilding` : bâtiment complet plus `job` (string id, ex. `minecolonies:builder`), si employé.
 - `state` : string traduite (`"Idle"` par défaut). `isIdle`, `isAsleep`, `isMourning`, `needsBetterFood` : boolean.
 - `partner` : id (si marié). `children` : liste d'ids. `health`, `maxHealth`, `armor`, `toughness` : number (si entité chargée).
 - Visiteur : `id,uuid,name,isChild,gender,saturation,happiness,skills,disease`, `pos` (position assise), `recruitCost` (table item). Pas de `job`, `homeBuilding`, `bedPos`.
@@ -193,7 +193,7 @@ until id == t.getId() and (isErr or status == "JOB_DONE")
 - Valeurs de `status` (ressources), `state` (requêtes), `jobStatus`, `type`, `stage` : énumérations MineColonies absentes du jar.
 - `isCrafting` et `getCraftingTask` enveloppent un `MethodResult` dans un second `MethodResult.of(Object)` : la valeur vue en Lua peut être `nil`. Tester en jeu. Repli : `getCraftingTasks()` ou `getCraftingCPUs()[i].isBusy`.
 - Conversion en Lua de l'objet tâche de `craftItem` (table de méthodes attendue via `@LuaFunction`) ; ordre des paramètres d'événement côté `os.pullEvent`.
-- Clés nullables (`bedPos`, `homeBuilding`, `workBuilding`, `job`, `disease`) : absentes ou `nil`, équivalent en Lua.
+- Clés nullables (`bedPos`, `homeBuilding`, `workBuilding`, `disease`) : absentes ou `nil`, équivalent en Lua.
 - `getWorkOrderResources` sur commande non réclamée, `getBuilderResources` sur bâtiment absent ou non constructeur : `nil` probable, exception possible.
 - Item pour une pile vide ; sens exact des `matcher` ; unités de l'énergie et des capacités.
 - Fluides et chimiques (`getFluid*`, `exportFluid`...) non relevés. Doc embarquée (patchouli) non confrontée.

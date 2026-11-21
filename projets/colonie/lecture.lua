@@ -17,6 +17,11 @@ local function lire(integrateur, methode, defaut)
   return defaut
 end
 
+-- Le métier d'un citoyen est porté par son bâtiment de travail (`workBuilding.job`), absent s'il est sans emploi.
+local function job_de(citoyen)
+  return type(citoyen.workBuilding) == "table" and citoyen.workBuilding.job or nil
+end
+
 local function metier(job)
   if type(job) ~= "string" then return "" end
   local nom = job:match(":(.+)$") or job
@@ -26,12 +31,12 @@ end
 local function habitant(citoyen)
   return {
     nom = citoyen.name or "",
-    metier = metier(citoyen.job),
+    metier = metier(job_de(citoyen)),
     etat = citoyen.state or "",
     sante = tonumber(citoyen.health) or 0,         -- 0 : entité non chargée
     sante_max = tonumber(citoyen.maxHealth) or 0,
     loge = citoyen.homeBuilding ~= nil,
-    employe = citoyen.job ~= nil,
+    employe = job_de(citoyen) ~= nil,
   }
 end
 
