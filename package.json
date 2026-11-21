@@ -1,0 +1,12 @@
+{
+  "name": "computercraft",
+  "private": true,
+  "description": "Programmes ComputerCraft (CC: Tweaked). Node ne sert qu'aux tests hors jeu.",
+  "scripts": {
+    "test": "node tests/lancer.js",
+    "verify": "node tests/lancer.js"
+  },
+  "devDependencies": {
+    "fengari": "^0.1.5"
+  }
+}
