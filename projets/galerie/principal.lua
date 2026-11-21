@@ -6,6 +6,7 @@ local config = require("commun.config")
 local dessin = require("commun.dessin")
 local peripheriques = require("commun.peripheriques")
 local theme = require("commun.theme")
+local vers_cc = require("commun.texte").vers_cc
 local defauts = require("galerie.reglages")
 local noms = require("galerie.ecrans")
 
@@ -13,7 +14,7 @@ local CHEMIN_CONFIG = "/galerie.cfg"
 local DUREE_MESSAGE = 3
 
 local reglages, erreur_config = config.charger(CHEMIN_CONFIG, defauts)
-if erreur_config then print("Config : " .. erreur_config) end
+if erreur_config then print(vers_cc("Config : " .. erreur_config)) end
 
 -- Écrans chargés ; un fichier fautif est annoncé puis ignoré.
 local ecrans = {}
@@ -22,7 +23,7 @@ for _, nom in ipairs(noms) do
   if ok and type(ecran) == "table" and type(ecran.dessiner) == "function" then
     ecrans[#ecrans + 1] = ecran
   else
-    print("Écran " .. nom .. " ignoré : " .. tostring(ok and "forme invalide" or ecran))
+    print(vers_cc("Écran " .. nom .. " ignoré : " .. tostring(ok and "forme invalide" or ecran)))
   end
 end
 if #ecrans == 0 then error("aucun écran utilisable", 0) end
@@ -36,7 +37,7 @@ local function cible_affichage()
 end
 
 local function annoncer(cible, message)
-  print(message)
+  print(vers_cc(message))
   if cible == term.current() then return end
   pcall(function()
     dessin.effacer(cible)
@@ -86,4 +87,4 @@ for _, cible in ipairs({ jouer(), term.current() }) do
   pcall(theme.restaurer, cible)
   pcall(dessin.effacer, cible)
 end
-print("Galerie arrêtée.")
+print(vers_cc("Galerie arrêtée."))

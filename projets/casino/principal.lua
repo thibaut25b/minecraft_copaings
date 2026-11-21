@@ -133,4 +133,4 @@ for _, cible in ipairs({ term.current(), peripheriques.trouver(peripheriques.TYP
   pcall(theme.restaurer, cible)
   pcall(dessin.effacer, cible)
 end
-print("Casino arrêté.")
+print(require("commun.texte").vers_cc("Casino arrêté."))
