@@ -2,15 +2,17 @@
 
 local DEPOT = "thibaut25b/minecraft_copaings"
 local BRANCHE = "main"
-local BASE = "https://raw.githubusercontent.com/" .. DEPOT .. "/" .. BRANCHE .. "/"
+local RACINE = "https://raw.githubusercontent.com/" .. DEPOT .. "/"
+local BASE = RACINE .. BRANCHE .. "/"
 
 local STARTUP = "/startup.lua"
 local STARTUP_ANCIEN = "/startup.ancien.lua"
-local USAGE = "Usage : wget run " .. BASE .. "install.lua <projet>\nExemple : wget run " .. BASE .. "install.lua colonie"
+local USAGE = "Usage : wget run " .. BASE .. "install.lua <projet> [branche]\nExemple : wget run " .. BASE .. "install.lua colonie"
 local MESSAGE_HTTP = "http est désactivé sur ce serveur. Demande à l'admin de passer http.enabled à true "
   .. "dans computercraft-server.toml (et d'autoriser raw.githubusercontent.com)."
 
 local installeur = { base = BASE }
+local base = BASE -- base des téléchargements de l'installation en cours
 
 -- Même conversion que `commun/texte.lua`, recopiée ici car ce fichier se télécharge seul.
 local function vers_cc(valeur)
@@ -26,7 +28,7 @@ local function afficher(message)
 end
 
 local function telecharger(chemin_depot)
-  local reponse, message = http.get(BASE .. chemin_depot)
+  local reponse, message = http.get(base .. chemin_depot)
   if not reponse then return nil, tostring(message or "aucune réponse") end
   local contenu = reponse.readAll()
   reponse.close()
@@ -102,8 +104,15 @@ function installeur.ecrire_startup(manifeste, sortie)
 end
 
 --- Installe ou met à jour le projet `nom`. Renvoie `true`, ou `false, message`. `sortie(texte)` affiche la progression.
-function installeur.installer(nom, sortie)
+-- `branche` (facultatif) installe depuis une autre branche du dépôt, pour essayer une version avant sa fusion.
+function installeur.installer(nom, sortie, branche)
   if http == nil then return false, MESSAGE_HTTP end
+  base = BASE
+  if branche ~= nil then
+    if type(branche) ~= "string" or not branche:match("^[%w_%-]+$") then return false, "Branche invalide\n" .. USAGE end
+    base = RACINE .. branche .. "/"
+    sortie("Branche : " .. branche)
+  end
   local manifeste, message = installeur.lire_manifeste(nom)
   if not manifeste then return false, message end
   sortie("Installation de " .. nom)
@@ -121,9 +130,9 @@ function installeur.installer(nom, sortie)
   return true
 end
 
---- Point d'entrée en jeu : `lancer(nom)`.
-function installeur.lancer(nom)
-  local ok, message = installeur.installer(nom, afficher)
+--- Point d'entrée en jeu : `lancer(nom, branche)`.
+function installeur.lancer(nom, branche)
+  local ok, message = installeur.installer(nom, afficher, branche)
   if not ok then afficher(message) end
 end
 

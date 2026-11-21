@@ -113,4 +113,30 @@ return {
     verif.egal(ok, false)
     verif.vrai(message:find("Usage", 1, true))
   end,
+
+  branche_donnee_telecharge_depuis_cette_branche_seulement = function()
+    local etat = systeme.installer()
+    local essai = BASE:gsub("/main/$", "/essai/")
+    etat.urls[essai .. "projets/demo/manifeste.lua"] = MANIFESTE
+    etat.urls[essai .. "commun/a.lua"] = "-- a de la branche"
+    etat.urls[essai .. "projets/demo/principal.lua"] = "-- principal de la branche"
+    local ok = installeur.installer("demo", function() end, "essai")
+    verif.egal(ok, true)
+    verif.egal(etat.disque["commun/a.lua"], "-- a de la branche")
+  end,
+
+  installation_sans_branche_revient_a_la_branche_par_defaut = function()
+    local etat = preparer()
+    installeur.installer("demo", function() end, "essai")
+    verif.egal((installer()), true)
+    verif.egal(etat.disque["commun/a.lua"], "-- a")
+  end,
+
+  branche_au_nom_invalide_est_refusee_sans_rien_ecrire = function()
+    local etat = preparer()
+    local ok, message = installeur.installer("demo", function() end, "../autre")
+    verif.egal(ok, false)
+    verif.vrai(message:find("Branche invalide", 1, true))
+    verif.egal(#etat.ecritures, 0)
+  end,
 }
