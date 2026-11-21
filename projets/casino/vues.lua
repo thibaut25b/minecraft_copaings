@@ -16,6 +16,7 @@ local ECRANS = {
   machine = require("casino.vues.machine"),
   roulette = require("casino.vues.roulette"),
   crash = require("casino.vues.crash"),
+  blackjack = require("casino.vues.blackjack"),
 }
 
 --- Plan de l'écran courant pour une cible de `largeur` x `hauteur` : { zones, ... } ; `trop_petit` sous le minimum.

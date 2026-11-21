@@ -3,6 +3,7 @@
 local dessin = require("commun.dessin")
 local graphes = require("commun.graphes")
 local panneaux = require("commun.panneaux")
+local texte = require("commun.texte")
 local theme = require("commun.theme")
 local base = require("casino.vues.base")
 local symboles = require("casino.vues.symboles")
@@ -62,13 +63,28 @@ local function art_crash(toile, lpx, hpx)
   toile.point(fin, precedent, R.moyen)
 end
 
+-- Deux cartes en éventail : un as de coeur devant un roi de pique.
+local function art_blackjack(toile, lpx, hpx)
+  local h = hpx - 2
+  local l = math.max(3, math.min(math.floor(h * 0.7), math.floor(lpx / 2) - 1))
+  local x = math.floor((lpx - l * 1.6) / 2) + 1
+  for i, encre in ipairs({ R.fond, R.mauvais }) do
+    local gauche, haut = x + (i - 1) * math.floor(l * 0.6), 2 + (i - 1) * math.floor(h * 0.08)
+    toile.rectangle(gauche, haut, l, h - (i - 1) * math.floor(h * 0.08), R.texte, true)
+    toile.rectangle(gauche, haut, l, h - (i - 1) * math.floor(h * 0.08), R.discret, false)
+    toile.cercle(gauche + l / 2, haut + h / 2, math.max(1, math.floor(l / 4)), encre, true)
+  end
+end
+
 local TUILES = {
   { jeu = "machine", titre = "Machine à sous", court = "Machine", texte = "3 rouleaux, jusqu'à x100",
-    texte_court = "jusqu'à x100", art = art_machine, couleur = R.mauvais },
+    texte_court = "x100 max", art = art_machine, couleur = R.mauvais },
   { jeu = "roulette", titre = "Roulette", texte = "Européenne, de 0 à 36", texte_court = "0 à 36",
     art = art_roulette, couleur = R.bon },
-  { jeu = "crash", titre = "Crash", texte = "Encaisse avant l'explosion", texte_court = "Encaisse vite",
+  { jeu = "crash", titre = "Crash", texte = "Encaisse avant l'explosion", texte_court = "Encaisse",
     art = art_crash, couleur = R.alerte },
+  { jeu = "blackjack", titre = "Blackjack", texte = "21 contre la banque", texte_court = "3 pour 2",
+    art = art_blackjack, couleur = R.accent2 },
 }
 
 --- Géométrie du hall : bloc du solde, tuiles (zones « ouvrir ») et bouton de recharge.
@@ -77,7 +93,7 @@ function hall.disposer(largeur, hauteur, etat)
   local solde = { x = 2, y = 3, largeur = largeur - 2, hauteur = grand and 9 or 4 }
   local y_tuiles, y_bas = solde.y + solde.hauteur + 1, hauteur - 2
   local zones = {}
-  for i, morceau in ipairs(panneaux.repartir(2, largeur - 2, { 1, 1, 1 }, 2)) do
+  for i, morceau in ipairs(panneaux.repartir(2, largeur - 2, { 1, 1, 1, 1 }, 2)) do
     local tuile = TUILES[i]
     zones[i] = { cle = "tuile_" .. tuile.jeu, x = morceau.debut, y = y_tuiles, largeur = morceau.taille,
       hauteur = y_bas - 1 - y_tuiles, action = { type = "ouvrir", jeu = tuile.jeu, cle = "tuile_" .. tuile.jeu },
@@ -86,7 +102,7 @@ function hall.disposer(largeur, hauteur, etat)
   local recharge = "+" .. panneaux.milliers(etat.recharge)
   zones[#zones + 1] = { cle = "recharger", x = 2, y = y_bas, largeur = math.min(30, math.floor(largeur / 2) - 2),
     hauteur = 3, action = { type = "recharger", cle = "recharger" }, bouton = true, style = "principal",
-    texte = "Recharger " .. recharge .. " jetons" }
+    texte = "Recharger +" .. texte.quantite(etat.recharge, "jeton") }
   local bouton = zones[#zones]
   bouton.texte = base.choisir(bouton.texte, "Recharger " .. recharge, bouton.largeur)
   return { largeur = largeur, hauteur = hauteur, grand = grand, zones = zones, solde = solde,

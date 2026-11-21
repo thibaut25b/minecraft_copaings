@@ -3,6 +3,9 @@
 local machine = require("casino.jeux.machine")
 local roulette = require("casino.jeux.roulette")
 local crash = require("casino.jeux.crash")
+local blackjack = require("casino.jeux.blackjack")
+
+local texte = require("commun.texte")
 
 local session = {}
 
@@ -17,6 +20,9 @@ session.TOURS_MACHINE = 1
 session.DUREE_APPUI = 0.15
 session.DUREE_MESSAGE = 4
 session.DUREE_FETE = 2
+--- Blackjack : écart entre deux cartes distribuées, durée du glissement d'une carte (secondes).
+session.PAS_CARTE = 0.45
+session.GLISSE_CARTE = 0.25
 --- Nombre de résultats gardés dans l'historique d'un jeu.
 session.HISTORIQUE = 12
 
@@ -50,7 +56,7 @@ function session.corriger(reglages, defauts, themes)
   for cle, defaut in pairs(defauts) do
     if type(reglages[cle]) ~= type(defaut) then remettre(cle, "invalide") end
   end
-  for _, cle in ipairs({ "mise_min", "mise_max", "jetons_depart", "recharge" }) do
+  for _, cle in ipairs({ "mise_min", "mise_max", "mise_defaut", "jetons_depart", "recharge", "jeux_blackjack" }) do
     local valeur = reglages[cle]
     if valeur ~= math.floor(valeur) or valeur < 1 then remettre(cle, "doit être un entier positif") end
   end
@@ -75,21 +81,29 @@ function session.position(depart, distance, duree, ecoule)
   return depart + distance * (1 - (1 - part) ^ 3)
 end
 
---- Nouvelle session : hall, première mise, rien en cours. `solde` vient de la caisse.
+--- Nouvelle session : hall, mise de départ (le plus grand palier sous `mise_defaut`), rien en cours. `solde` vient
+--- de la caisse.
 function session.nouvelle(reglages, solde)
   local paliers = session.paliers(reglages.mise_min, reglages.mise_max)
+  local mise = paliers[1]
+  for _, palier in ipairs(paliers) do
+    if palier <= reglages.mise_defaut then mise = palier end
+  end
   return {
-    ecran = "hall", solde = solde, record = 0, paliers = paliers, mise = paliers[1], mise_max = reglages.mise_max,
-    recharge = reglages.recharge, regles = false, sons = {}, geste = 0,
+    ecran = "hall", solde = solde, record = 0, paliers = paliers, mise = mise, mise_max = reglages.mise_max,
+    recharge = reglages.recharge, jeux_blackjack = reglages.jeux_blackjack, regles = false, sons = {}, geste = 0,
     machine = { phase = "attente", arrets = { 13, 6, 9 } },
     roulette = { phase = "attente", mises = {}, historique = {}, position = 0 },
     crash = { phase = "attente", historique = {} },
+    blackjack = { phase = "attente", joueur = {}, banque = {} },
   }
 end
 
 --- Vrai si un tour est en train de se jouer.
 function session.en_cours(etat)
+  local phase = etat.blackjack.phase
   return etat.machine.phase == "tourne" or etat.roulette.phase == "tourne" or etat.crash.phase == "monte"
+    or phase == "anime" or phase == "joueur"
 end
 
 --- Affiche `texte` quelques secondes ; `ton` : "bon", "mauvais" ou "info".
@@ -181,7 +195,7 @@ local function poser_jeton(etat, contexte, cle)
     return refuser(etat, "Solde insuffisant pour un jeton de plus.", contexte.maintenant)
   end
   if (jeu.mises[cle] or 0) + etat.mise > etat.mise_max then
-    return refuser(etat, "Mise maximale par case : " .. etat.mise_max .. " jetons.", contexte.maintenant)
+    return refuser(etat, "Mise maximale par case : " .. texte.quantite(etat.mise_max, "jeton") .. ".", contexte.maintenant)
   end
   jeu.mises[cle] = (jeu.mises[cle] or 0) + etat.mise
   jeu.phase, jeu.fete = "attente", nil
@@ -248,9 +262,115 @@ local function encaisser(etat, contexte)
   finir_crash(etat, contexte, "encaisse", atteint, crash.gain(jeu.mise, atteint))
 end
 
+-- Blackjack --------------------------------------------------------------------------------------------------------
+-- Les cartes portent leur `instant` d'apparition ; `fin` est la fin de l'animation, `suite` la phase qui suit.
+
+local function poser(main, carte, instant)
+  carte.instant = instant
+  main[#main + 1] = carte
+end
+
+-- La banque retourne sa carte cachée à `debut` puis tire selon sa règle ; la main se règle ensuite.
+local function jouer_banque(jeu, debut)
+  jeu.revele = debut
+  local instant = debut + session.PAS_CARTE
+  for _ = 1, #blackjack.tirage_banque(jeu.banque, jeu.sabot) do
+    poser(jeu.banque, blackjack.tirer(jeu.sabot), instant)
+    instant = instant + session.PAS_CARTE
+  end
+  jeu.phase, jeu.fin, jeu.suite = "anime", instant, "fini"
+end
+
+-- Après une carte du joueur : dépassement (main perdue), 21 ou doublement (la banque joue), sinon il rejoue.
+local function apres_carte(jeu, maintenant, double)
+  local debut = maintenant + session.GLISSE_CARTE
+  local total = blackjack.valeur(jeu.joueur)
+  if total > 21 then
+    jeu.revele, jeu.phase, jeu.fin, jeu.suite = debut, "anime", debut + session.PAS_CARTE, "fini"
+  elseif double or total == 21 then
+    jouer_banque(jeu, debut)
+  else
+    jeu.phase, jeu.fin, jeu.suite = "anime", debut, "joueur"
+  end
+end
+
+local function jouer_blackjack(etat, contexte)
+  local jeu, maintenant = etat.blackjack, contexte.maintenant
+  local remelange = not jeu.sabot or blackjack.a_remelanger(jeu.sabot)
+  if remelange then jeu.sabot = blackjack.sabot(etat.jeux_blackjack, contexte.hasard) end
+  local sabot = jeu.sabot
+  local depart = sabot.position
+  local cartes = {}
+  for i = 1, 4 do cartes[i] = blackjack.tirer(sabot) end
+  local joueur, banque = { cartes[1], cartes[3] }, { cartes[2], cartes[4] }
+  if not miser(etat, contexte, etat.mise, blackjack.gain_si_reste(joueur, banque, sabot, etat.mise)) then
+    sabot.position = depart
+    return
+  end
+  if remelange then session.avertir(etat, "Sabot remélangé.", "info", maintenant) end
+  jeu.joueur, jeu.banque, jeu.mise, jeu.double = {}, {}, etat.mise, false
+  jeu.resultat, jeu.issue, jeu.revele, jeu.fete = nil, nil, nil, nil
+  for i, carte in ipairs(cartes) do
+    poser(i % 2 == 1 and jeu.joueur or jeu.banque, carte, maintenant + (i - 1) * session.PAS_CARTE)
+  end
+  local fin = maintenant + 3 * session.PAS_CARTE + session.GLISSE_CARTE
+  if blackjack.naturel(joueur) or blackjack.naturel(banque) then
+    jeu.revele, jeu.phase, jeu.fin, jeu.suite = fin, "anime", fin + session.PAS_CARTE, "fini"
+  else
+    jeu.phase, jeu.fin, jeu.suite = "anime", fin, "joueur"
+  end
+end
+
+-- Une carte de plus pour le joueur ; le gain prévu de la caisse devient celui du joueur qui resterait ensuite.
+local function tirer_carte(etat, contexte)
+  local jeu = etat.blackjack
+  if jeu.phase ~= "joueur" then return end
+  poser(jeu.joueur, blackjack.tirer(jeu.sabot), contexte.maintenant)
+  local ok, raison = contexte.caisse.modifier(0, blackjack.gain_si_reste(jeu.joueur, jeu.banque, jeu.sabot, jeu.mise))
+  if not ok then refuser(etat, raison, contexte.maintenant) end
+  sonner(etat, "carte")
+  apres_carte(jeu, contexte.maintenant, false)
+end
+
+local function rester(etat, contexte)
+  local jeu = etat.blackjack
+  if jeu.phase ~= "joueur" then return end
+  sonner(etat, "carte")
+  jouer_banque(jeu, contexte.maintenant)
+end
+
+-- Doubler : seconde mise égale à la première, une seule carte, puis la banque joue. Refusé sans assez de jetons.
+local function doubler(etat, contexte)
+  local jeu = etat.blackjack
+  if jeu.phase ~= "joueur" or #jeu.joueur ~= 2 then return end
+  local apercu = { cartes = jeu.sabot.cartes, position = jeu.sabot.position }
+  local main = { jeu.joueur[1], jeu.joueur[2], blackjack.tirer(apercu) }
+  local ok, raison = contexte.caisse.modifier(jeu.mise, blackjack.gain_si_reste(main, jeu.banque, apercu, 2 * jeu.mise))
+  etat.solde = contexte.caisse.solde()
+  if not ok then return refuser(etat, raison, contexte.maintenant) end
+  jeu.mise, jeu.double = 2 * jeu.mise, true
+  poser(jeu.joueur, blackjack.tirer(jeu.sabot), contexte.maintenant)
+  sonner(etat, "mise")
+  apres_carte(jeu, contexte.maintenant, true)
+end
+
+-- Sans geste pendant `inactivite`, le joueur reste ; une animation finie passe à sa suite, une main finie se règle.
+local function avancer_blackjack(etat, contexte)
+  local jeu = etat.blackjack
+  if jeu.phase == "joueur" and contexte.maintenant - etat.geste >= contexte.inactivite then
+    rester(etat, contexte)
+  end
+  if jeu.phase ~= "anime" or contexte.maintenant < jeu.fin then return end
+  jeu.phase = jeu.suite
+  if jeu.phase ~= "fini" then return end
+  local gain, issue = blackjack.regler(jeu.joueur, jeu.banque, jeu.mise)
+  jeu.issue = issue
+  regler(etat, contexte, jeu, gain)
+end
+
 -- Actions ----------------------------------------------------------------------------------------------------------
 
-local JOUER = { machine = jouer_machine, roulette = jouer_roulette, crash = jouer_crash }
+local JOUER = { machine = jouer_machine, roulette = jouer_roulette, crash = jouer_crash, blackjack = jouer_blackjack }
 
 local function changer_mise(etat, pas)
   local indice = 1
@@ -264,7 +384,7 @@ local function recharger(etat, contexte)
   local ok, resultat = contexte.caisse.recharger()
   etat.solde = contexte.caisse.solde()
   if not ok then return refuser(etat, resultat, contexte.maintenant) end
-  session.avertir(etat, "+" .. resultat .. " jetons fictifs ajoutés.", "bon", contexte.maintenant)
+  session.avertir(etat, "+" .. texte.quantite(resultat, "jeton") .. " fictifs ajoutés.", "bon", contexte.maintenant)
   sonner(etat, "gain")
 end
 
@@ -291,6 +411,12 @@ function session.agir(etat, action, contexte)
     encaisser(etat, contexte)
   elseif genre == "case" then
     poser_jeton(etat, contexte, action.case)
+  elseif genre == "tirer" then
+    tirer_carte(etat, contexte)
+  elseif genre == "rester" then
+    rester(etat, contexte)
+  elseif genre == "doubler" then
+    doubler(etat, contexte)
   elseif genre == "effacer" then
     if etat.roulette.phase ~= "tourne" then etat.roulette.mises, etat.roulette.phase = {}, "attente" end
   else
@@ -305,9 +431,10 @@ function session.avancer(etat, contexte)
   avancer_machine(etat, contexte)
   avancer_roulette(etat, contexte)
   avancer_crash(etat, contexte)
+  avancer_blackjack(etat, contexte)
   if etat.message and maintenant >= etat.message.fin then etat.message = nil end
   if etat.appui and maintenant >= etat.appui.fin then etat.appui = nil end
-  for _, nom in ipairs({ "machine", "roulette", "crash" }) do
+  for _, nom in ipairs({ "machine", "roulette", "crash", "blackjack" }) do
     local jeu = etat[nom]
     if jeu.fete and maintenant >= jeu.fete then jeu.fete = nil end
   end
@@ -318,7 +445,7 @@ end
 
 --- Vrai si l'écran bouge tout seul (tour en cours ou fête d'un gain) : il faut une image par période.
 function session.anime(etat, maintenant)
-  if session.en_cours(etat) then return true end
+  if session.en_cours(etat) and etat.blackjack.phase ~= "joueur" then return true end
   local jeu = etat[etat.ecran]
   return jeu ~= nil and jeu.fete ~= nil and maintenant < jeu.fete
 end

@@ -17,6 +17,8 @@ end
 
 -- Joue `etapes` (actions, attentes) sur une session neuve ; renvoie l'état et l'instant final.
 -- Une étape : { action } pour agir, { attendre = secondes } pour avancer le temps.
+local COULEURS = { "pique", "coeur", "carreau", "trefle" }
+
 local function jouer(etapes, tirages, solde)
   local d = { contenu = { solde = solde or 1250 } }
   d.lire = function() return d.contenu end
@@ -29,7 +31,11 @@ local function jouer(etapes, tirages, solde)
   end }
   local etat = session.nouvelle(defauts, c.solde())
   for _, etape in ipairs(etapes) do
-    if etape.attendre then
+    if etape.sabot then
+      local cartes = {}
+      for i, rang in ipairs(etape.sabot) do cartes[i] = { rang = rang, couleur = COULEURS[i % 4 + 1] } end
+      etat.blackjack.sabot = { cartes = cartes, position = 1 }
+    elseif etape.attendre then
       ctx.maintenant = ctx.maintenant + etape.attendre
       session.avancer(etat, ctx)
     else
@@ -96,6 +102,22 @@ for _, taille in ipairs({ { 100, 38 }, { 51, 19 } }) do
     { "crash_explose", "Crash : explosion", { ouvrir("crash"), MISE_PLUS, MISE_PLUS, JOUER, { attendre = 12 } },
       { 6866 } },
     { "regles_machine", "Règles de la machine", { ouvrir("machine"), { type = "regles" } } },
+    { "bj_attente", "Blackjack : attente de mise", { ouvrir("blackjack") } },
+    { "bj_distribution", "Blackjack : distribution", { ouvrir("blackjack"), { sabot = { 5, 10, 4, 7, 3 } }, JOUER,
+      { attendre = 0.8 } } },
+    { "bj_main", "Blackjack : main en cours", { ouvrir("blackjack"), { sabot = { 5, 10, 4, 7, 3 } }, JOUER,
+      { attendre = 2 }, { type = "tirer" }, { attendre = 1 } } },
+    { "bj_double", "Blackjack : doublé et gagné", { ouvrir("blackjack"), { sabot = { 5, 10, 6, 7, 10, 4 } }, JOUER,
+      { attendre = 2 }, { type = "doubler" }, { attendre = 3 } } },
+    { "bj_gagne", "Blackjack : gagné", { ouvrir("blackjack"), { sabot = { 10, 10, 9, 7 } }, JOUER, { attendre = 2 },
+      { type = "rester" }, { attendre = 2 } } },
+    { "bj_perdu", "Blackjack : dépassé", { ouvrir("blackjack"), { sabot = { 10, 10, 6, 9, 10 } }, JOUER,
+      { attendre = 2 }, { type = "tirer" }, { attendre = 2 } } },
+    { "bj_blackjack", "Blackjack naturel", { ouvrir("blackjack"), { sabot = { 1, 9, 13, 7 } }, JOUER,
+      { attendre = 3 } } },
+    { "bj_egalite", "Blackjack : égalité", { ouvrir("blackjack"), { sabot = { 10, 10, 8, 8 } }, JOUER,
+      { attendre = 2 }, { type = "rester" }, { attendre = 2 } } },
+    { "regles_blackjack", "Règles du blackjack", { ouvrir("blackjack"), { type = "regles" } } },
     { "regles_roulette", "Règles de la roulette", { ouvrir("roulette"), { type = "regles" } } },
     { "refus", "Mise refusée : solde insuffisant", { ouvrir("machine"), MISE_PLUS, MISE_PLUS, MISE_PLUS, JOUER }, {}, 3 },
   }
@@ -103,6 +125,8 @@ for _, taille in ipairs({ { 100, 38 }, { 51, 19 } }) do
     c[4], c[5]) end
 end
 ecrans[#ecrans + 1] = ecran("hall_164x81", "Hall, très grand moniteur", 164, 81, {})
+ecrans[#ecrans + 1] = ecran("bj_main_164x81", "Blackjack, très grand moniteur", 164, 81, { ouvrir("blackjack"),
+  { sabot = { 5, 10, 4, 7, 3 } }, JOUER, { attendre = 2 }, { type = "tirer" }, { attendre = 1 } })
 ecrans[#ecrans + 1] = ecran("roulette_164x81", "Roulette, très grand moniteur", 164, 81, MISES_ROULETTE)
 ecrans[#ecrans + 1] = ecran("trop_petit", "Moniteur trop petit (39x13)", 39, 13, {})
 

@@ -2,6 +2,8 @@
 -- Règle de reprise : un tour est écrit en une fois avec sa mise et le gain qu'il donne si le joueur ne touche plus à
 -- rien ; un tour resté en suspens (arrêt en plein tour) est réglé à ce gain à la réouverture.
 
+local texte = require("commun.texte")
+
 local caisse = {}
 
 local function entier(valeur, minimum)
@@ -19,7 +21,8 @@ end
 --- l'état n'a pas pu être relu ou écrit.
 ---
 --- La caisse : solde() ; miser(montant, gain_prevu) -> true ou false, raison ; regler(gain) -> true ou false,
---- raison ; recharger() -> true, montant ou false, raison ; en_cours() -> booléen.
+--- raison ; modifier(supplement, gain_prevu) -> true ou false, raison ; recharger() -> true, montant ou false,
+--- raison ; en_cours() -> booléen.
 function caisse.ouvrir(depot, regles)
   local etat = depot.lire()
   local reprise, probleme
@@ -60,7 +63,7 @@ function caisse.ouvrir(depot, regles)
     if etat.en_cours then return false, "Un tour est déjà en cours." end
     if not entier(montant, 1) then return false, "Mise invalide : " .. tostring(montant) end
     if montant > etat.solde then
-      return false, "Solde insuffisant : " .. etat.solde .. " jetons. Recharge au hall."
+      return false, "Solde insuffisant : " .. texte.quantite(etat.solde, "jeton") .. ". Recharge au hall."
     end
     local ancien = etat
     local ok, raison = enregistrer({ solde = etat.solde - montant, en_cours = { mise = montant, gain = gain_prevu } })
@@ -74,6 +77,20 @@ function caisse.ouvrir(depot, regles)
     if not etat.en_cours then error("aucun tour à régler", 2) end
     if not entier(gain, 0) then error("gain invalide : " .. tostring(gain), 2) end
     return enregistrer({ solde = etat.solde + gain })
+  end
+
+  --- Pendant un tour : retire `supplement` de plus (0 ou plus) et remplace le gain prévu, en une seule écriture.
+  function objet.modifier(supplement, gain_prevu)
+    if not etat.en_cours then error("aucun tour à modifier", 2) end
+    if not entier(supplement, 0) or not entier(gain_prevu, 0) then
+      error("modification invalide : " .. tostring(supplement) .. ", " .. tostring(gain_prevu), 2)
+    end
+    if supplement > etat.solde then return false, "Solde insuffisant pour doubler : " .. texte.quantite(etat.solde, "jeton") .. "." end
+    local ancien = etat
+    local ok, raison = enregistrer({ solde = etat.solde - supplement,
+      en_cours = { mise = etat.en_cours.mise + supplement, gain = gain_prevu } })
+    if not ok then etat = ancien end
+    return ok, raison
   end
 
   --- Ajoute les jetons gratuits de la démo, hors tour en cours.

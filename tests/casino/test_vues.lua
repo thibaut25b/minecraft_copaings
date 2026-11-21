@@ -4,6 +4,7 @@ colors = require("faux.couleurs")
 
 local verif = require("verif")
 local moniteur = require("faux.moniteur")
+local cible_comptable = require("casino.cible_comptable")
 local caisse = require("casino.caisse")
 local session = require("casino.session")
 local vues = require("casino.vues")
@@ -67,6 +68,12 @@ local ETATS = {
   { "crash explose", { ouvrir("crash"), JOUER, { attendre = 40 } }, { 9000 } },
   { "crash plafond", { ouvrir("crash"), JOUER, { attendre = 40 } }, { crash.TIRAGES } },
   { "règles", { ouvrir("roulette"), { type = "regles" } } },
+  { "blackjack attente", { ouvrir("blackjack") } },
+  { "blackjack distribution", { ouvrir("blackjack"), JOUER, { attendre = 0.8 } }, { 2, 3, 4, 5 } },
+  { "blackjack main", { ouvrir("blackjack"), JOUER, { attendre = 2 } } },
+  { "blackjack fini", { ouvrir("blackjack"), JOUER, { attendre = 2 }, { type = "tirer" }, { type = "doubler" },
+    { attendre = 2 }, { type = "rester" }, { attendre = 4 } } },
+  { "blackjack règles", { ouvrir("blackjack"), { type = "regles" } } },
   { "refus", { ouvrir("machine"), { type = "mise", pas = 5 }, JOUER }, {}, 3 },
   { "gros solde", { ouvrir("machine") }, {}, 123456789 },
 }
@@ -93,8 +100,9 @@ return {
     for _, cas in ipairs(ETATS) do
       local etat, maintenant = jouer(cas[2], cas[3], cas[4])
       for _, taille in ipairs(TAILLES) do
-        local m = dessine(etat, maintenant, taille[1], taille[2])
-        verif.egal(m.debordements, 0, string.format("%s en %dx%d", cas[1], taille[1], taille[2]))
+        local c = cible_comptable.nouvelle(taille[1], taille[2])
+        vues.dessiner(c, etat, maintenant)
+        verif.egal(c.debordements, 0, string.format("%s en %dx%d", cas[1], taille[1], taille[2]))
       end
     end
   end,
@@ -175,6 +183,18 @@ return {
       verif.egal(cases, 37 + 12)
       local x, y = m.chercher("13-24")
       verif.egal(vues.action_touchee(m, etat, x, y).case, "d2")
+    end
+  end,
+
+  blackjack_tirer_rester_doubler_au_toucher_pendant_la_main = function()
+    local etat, maintenant = jouer({ ouvrir("blackjack"), JOUER, { attendre = 2 } })
+    verif.egal(etat.blackjack.phase, "joueur")
+    for _, taille in ipairs(TAILLES) do
+      local m = dessine(etat, maintenant, taille[1], taille[2])
+      verif.egal(vues.action_touchee(m, etat, viser(m, "TIRER")).type, "tirer")
+      verif.egal(vues.action_touchee(m, etat, viser(m, "RESTER")).type, "rester")
+      local x, y = viser(m, m.chercher("DOUBLER") and "DOUBLER" or "x2")
+      verif.egal(vues.action_touchee(m, etat, x, y).type, "doubler")
     end
   end,
 

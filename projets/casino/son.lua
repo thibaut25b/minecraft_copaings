@@ -11,6 +11,7 @@ son.NOTES = {
   gain = { { "bell", 12 }, { "bell", 16 }, { "bell", 19 } },
   perte = { { "bass", 6 }, { "bass", 1 } },
   refus = { { "bit", 3 } },
+  carte = { { "hat", 18 } },
   explosion = { { "basedrum", 0 }, { "snare", 2 } },
 }
 

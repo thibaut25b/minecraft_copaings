@@ -2,6 +2,7 @@
 
 local dessin = require("commun.dessin")
 local panneaux = require("commun.panneaux")
+local texte = require("commun.texte")
 local theme = require("commun.theme")
 local base = require("casino.vues.base")
 local crash = require("casino.jeux.crash")
@@ -119,8 +120,9 @@ local function statut(etat, maintenant)
   local jeu = etat.crash
   if jeu.phase == "monte" then
     local atteint = crash.multiplicateur(maintenant - jeu.debut)
-    local gain = panneaux.milliers(crash.gain(jeu.mise, atteint))
-    return { texte = "ENCAISSER maintenant : " .. gain .. " jetons.", court = "Encaisser : " .. gain, couleur = R.moyen }
+    local gain = crash.gain(jeu.mise, atteint)
+    return { texte = "ENCAISSER maintenant : " .. texte.quantite(gain, "jeton") .. ".",
+      court = "Encaisser : " .. panneaux.milliers(gain), couleur = R.moyen }
   end
   if jeu.phase == "explose" then
     return base.statut_resultat(jeu.resultat, "Explosion à " .. crash.texte(jeu.point), etat.solde)

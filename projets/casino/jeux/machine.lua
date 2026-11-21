@@ -36,16 +36,23 @@ function machine.tirer(hasard)
   return { hasard(taille), hasard(taille), hasard(taille) }
 end
 
---- Ligne de la table qui paie pour ces arrêts, ou nil.
-function machine.combinaison(arrets)
+--- Ligne de la table qui paie pour ces symboles sur la ligne du milieu, ou nil.
+function machine.combinaison_symboles(noms)
   for _, ligne in ipairs(machine.TABLE) do
     local compte = 0
-    for _, arret in ipairs(arrets) do
-      if machine.BANDE[arret] == ligne.symbole then compte = compte + 1 end
+    for _, nom in ipairs(noms) do
+      if nom == ligne.symbole then compte = compte + 1 end
     end
     if compte == ligne.nombre then return ligne end
   end
   return nil
+end
+
+--- Ligne de la table qui paie pour ces arrêts, ou nil.
+function machine.combinaison(arrets)
+  local noms = {}
+  for i, arret in ipairs(arrets) do noms[i] = machine.BANDE[arret] end
+  return machine.combinaison_symboles(noms)
 end
 
 --- Libellé d'une ligne de la table : « Trois cloches », « Une cerise ».
@@ -60,15 +67,29 @@ function machine.gain(arrets, mise)
   return ligne and mise * ligne.multiplicateur or 0
 end
 
---- Taux de retour au joueur exact : moyenne du multiplicateur sur toutes les combinaisons d'arrêts.
+-- Taux de retour, calculé une fois.
+local retour_calcule
+
+--- Taux de retour au joueur exact : chaque triplet de symboles pèse le produit de leurs nombres d'arrêts sur la
+--- bande, ce qui revient à parcourir toutes les combinaisons d'arrêts.
 function machine.retour()
-  local taille, somme = #machine.BANDE, 0
-  for a = 1, taille do
-    for b = 1, taille do
-      for c = 1, taille do somme = somme + machine.gain({ a, b, c }, 1) end
+  if retour_calcule then return retour_calcule end
+  local arrets, noms = {}, {}
+  for _, nom in ipairs(machine.BANDE) do
+    if not arrets[nom] then noms[#noms + 1] = nom end
+    arrets[nom] = (arrets[nom] or 0) + 1
+  end
+  local somme = 0
+  for _, a in ipairs(noms) do
+    for _, b in ipairs(noms) do
+      for _, c in ipairs(noms) do
+        local ligne = machine.combinaison_symboles({ a, b, c })
+        if ligne then somme = somme + arrets[a] * arrets[b] * arrets[c] * ligne.multiplicateur end
+      end
     end
   end
-  return somme / taille ^ 3
+  retour_calcule = somme / (#machine.BANDE) ^ 3
+  return retour_calcule
 end
 
 --- Règles affichables : intro, entrées de la table ({ texte, symbole }), pied.

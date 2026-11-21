@@ -24,12 +24,8 @@ function panneaux.longueur(valeur)
   return #texte.vers_cc(valeur)
 end
 
---- Nombre entier arrondi avec une espace entre les milliers : 12480 donne « 12 480 ».
-function panneaux.milliers(nombre)
-  local chiffres = tostring(math.floor(math.abs(nombre) + 0.5))
-  local groupes = chiffres:reverse():gsub("(%d%d%d)", "%1 "):reverse():gsub("^ ", "")
-  return (nombre < 0 and "-" or "") .. groupes
-end
+--- Nombre entier arrondi avec une espace entre les milliers (voir `texte.milliers`).
+panneaux.milliers = texte.milliers
 
 --- Découpe `taille` cases à partir de `debut` en morceaux proportionnels à `poids`, séparés de `ecart` cases :
 --- liste de { debut, taille } dont les bords tombent sur des cases entières et dont la somme est exacte.

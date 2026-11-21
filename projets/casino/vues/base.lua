@@ -3,6 +3,7 @@
 local dessin = require("commun.dessin")
 local panneaux = require("commun.panneaux")
 local pixels = require("commun.pixels")
+local texte = require("commun.texte")
 local theme = require("commun.theme")
 local session = require("casino.session")
 
@@ -205,17 +206,17 @@ end
 --- Statut d'un tour réglé : gain, mise rendue ou perte, avec le nouveau solde.
 function base.statut_resultat(resultat, libelle, solde)
   local gain, mise = resultat.gain, resultat.mise
-  local milliers = panneaux.milliers
+  local milliers, quantite = texte.milliers, texte.quantite
   if gain > mise then
-    return { texte = string.format("%s : gagné %s jetons ! Solde %s.", libelle, milliers(gain), milliers(solde)),
-      court = "Gagné " .. milliers(gain) .. " jetons !", couleur = R.bon }
+    return { texte = string.format("%s : gagné %s ! Solde %s.", libelle, quantite(gain, "jeton"), milliers(solde)),
+      court = "Gagné " .. quantite(gain, "jeton") .. " !", couleur = R.bon }
   end
   if gain == mise then
     return { texte = libelle .. " : mise rendue. Solde " .. milliers(solde) .. ".", court = "Mise rendue.",
       couleur = R.info }
   end
-  return { texte = string.format("%s : perdu %s jetons. Solde %s.", libelle, milliers(mise - gain), milliers(solde)),
-    court = "Perdu " .. milliers(mise - gain) .. " jetons.", couleur = R.mauvais }
+  return { texte = string.format("%s : perdu %s. Solde %s.", libelle, quantite(mise - gain, "jeton"), milliers(solde)),
+    court = "Perdu " .. quantite(mise - gain, "jeton") .. ".", couleur = R.mauvais }
 end
 
 --- Mise en page de l'écran des règles : un seul bouton pour revenir au jeu.

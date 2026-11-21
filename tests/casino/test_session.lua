@@ -24,7 +24,9 @@ local function partie(solde, tirages)
     indice = indice + 1
     return tirages[indice] or 1
   end }
-  local etat = session.nouvelle(defauts, c.solde())
+  local reglages = copie(defauts)
+  reglages.mise_defaut = 1
+  local etat = session.nouvelle(reglages, c.solde())
   local p = { etat = etat, ctx = ctx, caisse = c, depot = d }
   function p.agir(action) session.agir(etat, action, ctx) end
   function p.attendre(secondes)

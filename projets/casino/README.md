@@ -1,6 +1,6 @@
 # Casino (démo)
 
-Machine à sous, roulette européenne et crash, au toucher, avec des jetons fictifs sans aucune valeur.
+Machine à sous, roulette européenne, crash et blackjack, au toucher, avec des jetons fictifs sans aucune valeur.
 
 ## Matériel
 
@@ -22,8 +22,9 @@ Q (sur l'ordinateur) ou Ctrl+T arrête le casino.
 - `/casino.cfg` : mises, jetons de départ, recharge, inactivité, thème, son. Sens de chaque réglage :
   `projets/casino/reglages.lua`.
 - `/casino.jetons` : le solde. Un tour coupé par un arrêt est réglé au redémarrage comme si tu n'avais plus touché
-  à rien (machine et roulette : résultat déjà tiré ; crash : perdu, sauf au plafond x100).
+  à rien (machine et roulette : résultat déjà tiré ; crash : perdu, sauf au plafond x100 ; blackjack : tu restes,
+  mise doublée comprise).
 - `/casino.log` : journal.
 
-Retour au joueur : machine 95,3 %, roulette 97,3 %, crash 97 %. Les règles de chaque jeu sont sous « Règles ».
+Retour au joueur : machine 95,3 %, roulette 97,3 %, crash 97 %, blackjack environ 99 % en jouant bien. Les règles de chaque jeu sont sous « Règles ».
 Aperçu hors jeu : `npm run apercu -- casino`, puis ouvre `apercu/casino.html`.

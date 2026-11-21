@@ -19,4 +19,16 @@ function texte.depuis_cc(octets)
   end))
 end
 
+--- Nombre entier arrondi avec une espace entre les milliers : 12480 donne « 12 480 ».
+function texte.milliers(nombre)
+  local chiffres = tostring(math.floor(math.abs(nombre) + 0.5))
+  local groupes = chiffres:reverse():gsub("(%d%d%d)", "%1 "):reverse():gsub("^ ", "")
+  return (nombre < 0 and "-" or "") .. groupes
+end
+
+--- Quantité accordée : `texte.quantite(1, "jeton")` donne « 1 jeton », 1250 donne « 1 250 jetons » (pluriel dès 2).
+function texte.quantite(nombre, nom)
+  return texte.milliers(nombre) .. " " .. nom .. (math.abs(nombre) >= 2 and "s" or "")
+end
+
 return texte

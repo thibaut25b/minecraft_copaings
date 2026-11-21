@@ -2,6 +2,7 @@
 
 local dessin = require("commun.dessin")
 local panneaux = require("commun.panneaux")
+local texte = require("commun.texte")
 local theme = require("commun.theme")
 local base = require("casino.vues.base")
 local roulette = require("casino.jeux.roulette")
@@ -167,8 +168,8 @@ local function statut(etat)
     return { texte = "Touche le tapis pour poser un jeton de " .. panneaux.milliers(etat.mise) .. ".",
       court = "Touche le tapis pour miser.", couleur = R.discret }
   end
-  return { texte = string.format("Mises : %s jetons sur %d case%s. Touche LANCER.", panneaux.milliers(total), cases,
-    cases > 1 and "s" or ""), court = "Mises : " .. panneaux.milliers(total) .. ". LANCER.", couleur = R.moyen }
+  return { texte = string.format("Mises : %s sur %s. Touche LANCER.", texte.quantite(total, "jeton"),
+    texte.quantite(cases, "case")), court = "Mises : " .. panneaux.milliers(total) .. ". LANCER.", couleur = R.moyen }
 end
 
 --- Dessine la roulette à l'instant `maintenant`.

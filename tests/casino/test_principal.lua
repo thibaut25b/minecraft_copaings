@@ -11,15 +11,19 @@ for i, nom in ipairs(machine.BANDE) do
   if nom == "sept" and not SEPT then SEPT = i end
 end
 
--- Monde : disque en mémoire, moniteur 100x38 (nil pour jouer sur le terminal), horloge et minuteries pilotées.
+-- Monde : disque en mémoire, moniteur 51x19 (les tailles sont balayées par test_vues) (nil pour jouer sur le terminal), horloge et minuteries pilotées.
 local function monde(options)
   options = options or {}
   local m = { horloge = 0, minuteurs = {}, numero = 0, terminal = faux_moniteur.nouveau(51, 19), notes = {},
     tirage = options.tirage or SEPT }
   m.etat_disque = options.disque or systeme.installer()
   if options.disque then systeme.installer().disque = options.disque.disque end
+  -- Hors du test de cadence, une image tous les quarts de seconde suffit et garde le test rapide.
+  if not options.disque and not options.cadence_reelle then
+    m.etat_disque.disque["casino.cfg"] = textutils.serialize({ periode_image = 0.25 })
+  end
   if options.moniteur ~= false then
-    m.moniteur = faux_moniteur.nouveau(100, 38)
+    m.moniteur = faux_moniteur.nouveau(51, 19)
     m.moniteur.setTextScale = function() end
   end
   if options.haut_parleur then
@@ -91,16 +95,33 @@ return {
     verif.egal(jetons(m), { solde = 500 })
     p.toucher("Machine")
     p.toucher("JOUER")
-    verif.egal(jetons(m), { solde = 499, en_cours = { mise = 1, gain = 100 } })
+    verif.egal(jetons(m), { solde = 490, en_cours = { mise = 10, gain = 1000 } })
     p.attendre(3)
-    verif.egal(jetons(m), { solde = 599 })
-    verif.vrai(m.moniteur.chercher("100 jetons !"), m.moniteur.texte())
-    verif.vrai(m.moniteur.chercher("Solde 599"), m.moniteur.texte())
+    verif.egal(jetons(m), { solde = 1490 })
+    verif.vrai(m.moniteur.chercher("1 000 jetons !"), m.moniteur.texte())
+    verif.vrai(m.moniteur.chercher("Solde 1 490"), m.moniteur.texte())
     verif.vrai(m.etat_disque.disque["casino.cfg"] ~= nil, "la config doit être créée au premier lancement")
   end,
 
-  l_animation_tourne_par_minuterie_puis_s_arrete = function()
+  main_de_blackjack_complete_au_toucher_reglee_au_gain_ecrit = function()
     local m = monde()
+    local p = lancer(m)
+    p.toucher("Blackjack")
+    p.toucher("DISTRIBUER")
+    local ouvert = jetons(m)
+    verif.egal(ouvert.solde, 490)
+    verif.egal(ouvert.en_cours.mise, 10)
+    p.attendre(2)
+    if m.moniteur.chercher("RESTER") then p.toucher("RESTER") end
+    p.attendre(5)
+    verif.egal(jetons(m), { solde = 490 + ouvert.en_cours.gain })
+    verif.vrai(m.moniteur.chercher("DISTRIBUER"), m.moniteur.texte())
+    verif.vrai(m.moniteur.chercher("Solde " .. require("commun.texte").milliers(490 + ouvert.en_cours.gain)),
+      m.moniteur.texte())
+  end,
+
+  l_animation_tourne_par_minuterie_puis_s_arrete = function()
+    local m = monde({ cadence_reelle = true })
     local p = lancer(m)
     p.toucher("Machine")
     local avant = m.numero
@@ -121,7 +142,7 @@ return {
     p.attendre(0.5)
     local relance = monde({ disque = m.etat_disque })
     lancer(relance)
-    verif.egal(jetons(relance), { solde = 599 })
+    verif.egal(jetons(relance), { solde = 1490 })
     verif.vrai(relance.moniteur.chercher("Tour interrompu"), relance.moniteur.texte())
   end,
 
@@ -149,7 +170,7 @@ return {
     p.toucher("JOUER")
     verif.vrai(m.moniteur.chercher("ble coup"), m.moniteur.texte())
     p.attendre(3)
-    verif.egal(jetons(m), { solde = 599 })
+    verif.egal(jetons(m), { solde = 1490 })
   end,
 
   haut_parleur_joue_les_notes_de_mise_et_de_gain = function()

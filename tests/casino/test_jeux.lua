@@ -17,6 +17,18 @@ local function hasard_fixe(valeur)
   return function() return valeur end
 end
 
+-- Nombre de tirages (sur les TIRAGES équiprobables) qui donnent chaque point du crash, énuméré une seule fois.
+local repartition
+local function repartition_crash()
+  if repartition then return repartition end
+  repartition = {}
+  for k = 1, crash.TIRAGES do
+    local point = crash.point(hasard_fixe(k))
+    repartition[point] = (repartition[point] or 0) + 1
+  end
+  return repartition
+end
+
 return {
   machine_trois_7_paient_cent_fois_la_mise = function()
     verif.egal(machine.gain({ arret("sept"), arret("sept"), arret("sept") }, 5), 500)
@@ -47,6 +59,17 @@ return {
     local retour = machine.retour()
     verif.vrai(math.abs(retour - 0.95325) < 1e-9, tostring(retour))
     verif.vrai(retour >= 0.94 and retour <= 0.97)
+  end,
+
+  machine_retour_combinatoire_egal_au_parcours_des_8000_combinaisons = function()
+    local taille, somme = #machine.BANDE, 0
+    for a = 1, taille do
+      for b = 1, taille do
+        for c = 1, taille do somme = somme + machine.gain({ a, b, c }, 1) end
+      end
+    end
+    verif.egal(somme, 7626)
+    verif.vrai(math.abs(machine.retour() - somme / taille ^ 3) < 1e-12)
   end,
 
   machine_tirage_prend_un_arret_par_rouleau_dans_la_bande = function()
@@ -116,39 +139,27 @@ return {
   end,
 
   crash_loi_du_point_verifiee_par_enumeration = function()
-    local n = crash.TIRAGES
-    local compte = {}
-    for k = 1, n do
-      local point = crash.point(hasard_fixe(k))
-      compte[point] = (compte[point] or 0) + 1
-    end
     -- P(point > m) = floor(0,97 x N / m) / N pour tout m de 1,00 au plafond.
-    local au_dessus = n
+    local compte, au_dessus = repartition_crash(), crash.TIRAGES
     for m = 100, crash.PLAFOND - 1 do
       au_dessus = au_dessus - (compte[m] or 0)
-      verif.egal(au_dessus, math.floor(crash.RETOUR * n / m), "m = " .. m)
+      verif.egal(au_dessus, math.floor(crash.RETOUR * crash.TIRAGES / m), "m = " .. m)
     end
   end,
 
   crash_explosion_immediate_trois_pour_cent = function()
-    local immediats = 0
-    for k = 1, crash.TIRAGES do
-      if crash.point(hasard_fixe(k)) == 100 then immediats = immediats + 1 end
-    end
-    verif.egal(immediats, crash.TIRAGES * (100 - crash.RETOUR) / 100)
+    verif.egal(repartition_crash()[100], crash.TIRAGES * (100 - crash.RETOUR) / 100)
   end,
 
-  crash_retour_exact_entre_96_et_97_pour_cent_quelle_que_soit_la_cible = function()
-    for _, cible in ipairs({ 101, 150, 200, 333, 1000, 5000, crash.PLAFOND }) do
-      local total = 0
-      for k = 1, crash.TIRAGES do
-        local point = crash.point(hasard_fixe(k))
-        if crash.gagne(cible, point) or (cible == crash.PLAFOND and point == crash.PLAFOND) then
-          total = total + crash.gain(100, cible)
-        end
-      end
-      local retour = total / (100 * crash.TIRAGES)
+  crash_retour_exact_entre_96_et_97_pour_cent_pour_chaque_cible = function()
+    -- Toutes les cibles de x1.01 au plafond ; on gagne si le point est au-dessus, ou au plafond s'il y est.
+    local compte, au_dessus = repartition_crash(), crash.TIRAGES - repartition_crash()[100]
+    for cible = 101, crash.PLAFOND do
+      au_dessus = au_dessus - (compte[cible] or 0)
+      local gagnants = cible == crash.PLAFOND and compte[cible] or au_dessus
+      local retour = gagnants * crash.gain(100, cible) / (100 * crash.TIRAGES)
       verif.vrai(retour >= 0.96 and retour <= 0.97, cible .. " : " .. retour)
+      verif.vrai(crash.gagne(cible, cible + 1) and not crash.gagne(cible, cible))
     end
   end,
 
