@@ -262,6 +262,23 @@ function disque.creer(fichiers)
     return true
   end
 
+  --- Texte de diagnostic : chaque fichier écrit par le programme, sa taille et ses `lignes_max` dernières lignes.
+  function objet.resumer(lignes_max)
+    local chemins, morceaux = {}, {}
+    for chemin in pairs(modifies) do
+      if contenus[chemin] then chemins[#chemins + 1] = chemin end
+    end
+    table.sort(chemins)
+    for _, chemin in ipairs(chemins) do
+      local lignes = {}
+      for ligne in (contenus[chemin] .. "\n"):gmatch("(.-)\r?\n") do lignes[#lignes + 1] = ligne end
+      if lignes[#lignes] == "" then lignes[#lignes] = nil end
+      morceaux[#morceaux + 1] = "== " .. chemin .. " (" .. #contenus[chemin] .. " octets, " .. #lignes .. " lignes)"
+      for i = math.max(1, #lignes - lignes_max + 1), #lignes do morceaux[#morceaux + 1] = lignes[i] end
+    end
+    return table.concat(morceaux, "\n")
+  end
+
   return objet
 end
 

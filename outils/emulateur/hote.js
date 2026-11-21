@@ -17,6 +17,9 @@ const NOMS_TOUCHES = {
   NumpadMultiply: "numPadMultiply", NumpadDivide: "numPadDivide", NumpadDecimal: "numPadDecimal",
 };
 
+const LIGNES_DIAGNOSTIC = 40; // dernières lignes de chaque fichier reprises dans le diagnostic
+const INCIDENTS_DIAGNOSTIC = 10;
+
 const $ = (id) => document.getElementById(id);
 const reglages = Object.assign({ taille: "100x38", zoom: "0", branches: {} }, JSON.parse(localStorage.getItem(CLE_REGLAGES) || "{}"));
 const enregistrerReglages = () => localStorage.setItem(CLE_REGLAGES, JSON.stringify(reglages));
@@ -150,16 +153,54 @@ function planifier(delai) {
   reveil = delai < 0 ? null : setTimeout(tourner, delai);
 }
 
+// Incidents de la session (erreurs du programme et de l'émulateur), repris par le bouton Diagnostic.
+const incidents = [];
+
 function montrerErreur(titre, details) {
+  incidents.push(new Date().toLocaleTimeString() + " " + titre + "\n" + details);
   $("erreurs").replaceChildren(alerte(titre + "\n" + details));
+}
+
+/** Texte à coller pour signaler un problème : navigateur, réglages, incidents et fichiers écrits par le programme. */
+function diagnostic() {
+  let fichiers;
+  try {
+    fichiers = lisible(appeler("disque", "resumer", LIGNES_DIAGNOSTIC)[0]);
+  } catch (erreur) {
+    fichiers = "illisibles : " + erreur.message;
+  }
+  return [
+    "Projet : " + PROJET.entree + " (page générée le " + PROJET.genere + ")",
+    "Navigateur : " + navigator.userAgent,
+    "Taille : " + reglages.taille + ", zoom " + reglages.zoom,
+    "État : " + $("etat").textContent,
+    "Incidents (" + incidents.length + ") :",
+    ...incidents.slice(-INCIDENTS_DIAGNOSTIC),
+    "Fichiers écrits par le programme :",
+    fichiers || "aucun",
+  ].join("\n");
 }
 
 function tourner() {
   reveil = null;
-  const [octetsEtat, delai, message, trace] = appeler(null, "executer");
+  let resultat;
+  try {
+    resultat = appeler(null, "executer");
+  } catch (erreur) {
+    $("etat").textContent = PROJET.entree + " : émulateur planté.";
+    montrerErreur("Erreur de l'émulateur", erreur.stack || String(erreur));
+    return;
+  }
+  const [octetsEtat, delai, message, trace] = resultat;
   const etat = lisible(octetsEtat);
   const exporte = appeler("disque", "exporter")[0];
-  if (exporte) localStorage.setItem(CLE_DISQUE, versLatin1(exporte));
+  if (exporte) {
+    try {
+      localStorage.setItem(CLE_DISQUE, versLatin1(exporte));
+    } catch (erreur) {
+      montrerErreur("Sauvegarde impossible dans ce navigateur", String(erreur));
+    }
+  }
   const textes = { attente: "Programme en cours.", fini: "Programme terminé.", arrete: "Ordinateur éteint.", erreur: "Programme planté." };
   $("etat").textContent = PROJET.entree + " : " + textes[etat] + (etat === "fini" && message ? " (" + lisible(message) + ")" : "");
   if (etat === "erreur") montrerErreur(lisible(message), lisible(trace));
@@ -268,6 +309,13 @@ function construireCommandes() {
     localStorage.removeItem(CLE_DISQUE);
     location.reload();
   });
+  $("diagnostiquer").addEventListener("click", () => {
+    const zone = $("diagnostic");
+    zone.value = diagnostic();
+    zone.hidden = false;
+    zone.select();
+    if (navigator.clipboard) navigator.clipboard.writeText(zone.value).catch(() => {});
+  });
   for (const ligne of lisible(appeler(null, "faux_peripheriques")[0]).split("\n").filter(Boolean)) {
     const [nom, type] = ligne.split(" ");
     const case_ = document.createElement("input");
@@ -332,6 +380,7 @@ function brancherClavier() {
 }
 
 window.addEventListener("error", (e) => montrerErreur("Erreur de l'émulateur", String(e.message)));
+window.addEventListener("unhandledrejection", (e) => montrerErreur("Erreur de l'émulateur", String(e.reason)));
 
 chargerPolice($("avertissements"), () => {
   const [largeur, hauteur] = reglages.taille.split("x").map(Number);

@@ -55,7 +55,7 @@ function main() {
   }
   const modules = {};
   for (const [nom, chemin] of Object.entries(MODULES_LUA)) modules[nom] = fs.readFileSync(path.join(RACINE, chemin), 'utf8');
-  const donnees = JSON.stringify({ nom: projet, entree: manifeste.entree, fichiers, modules }).replace(/</g, '\\u003c');
+  const donnees = JSON.stringify({ nom: projet, entree: manifeste.entree, genere: new Date().toISOString(), fichiers, modules }).replace(/</g, '\\u003c');
   const page = fs.readFileSync(path.join(__dirname, 'emulateur', 'page.html'), 'utf8')
     .replace(/__TITRE__/g, () => `Jouer : ${projet}`)
     .replace('__FENGARI__', () => fs.readFileSync(FENGARI_WEB, 'utf8'))

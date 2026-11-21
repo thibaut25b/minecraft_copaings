@@ -236,6 +236,19 @@ return {
     verif.egal(second.importer("n'importe quoi"), false)
   end,
 
+  diagnostic_montre_la_fin_des_fichiers_ecrits_et_pas_ceux_du_projet = function()
+    local disque = disques.creer({ ["/projet.lua"] = "return 1" })
+    local journal = disque.fs.open("/casino.log", "w")
+    for i = 1, 5 do journal.writeLine("ligne " .. i) end
+    journal.close()
+    local resume = disque.resumer(2)
+    verif.vrai(resume:find("== /casino.log", 1, true) or resume:find("== casino.log", 1, true), resume)
+    verif.vrai(resume:find("5 lignes", 1, true), resume)
+    verif.vrai(resume:find("ligne 5", 1, true) and resume:find("ligne 4", 1, true), resume)
+    verif.vrai(not resume:find("ligne 3", 1, true), resume)
+    verif.vrai(not resume:find("projet.lua", 1, true), resume)
+  end,
+
   textutils_serialise_comme_cc = function()
     local textutils = bibliotheques.textutils()
     verif.egal(textutils.serialize({ 1, "a", cle = true }), '{\n  1,\n  "a",\n  cle = true,\n}')
