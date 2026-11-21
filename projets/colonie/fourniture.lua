@@ -41,6 +41,16 @@ local function ligne(requete, action, statut, livre, message)
   return { requete = requete, action = action, statut = statut, livre = livre, message = message }
 end
 
+--- Lignes de passe quand aucun pont ME n'est disponible : chaque requête reste visible, à servir à la main.
+function fourniture.lignes_sans_pont(liste)
+  local lignes = {}
+  for indice, requete in ipairs(liste) do
+    local action = { type = "manquant", item = nil, quantite = 0, raison = "pas de pont ME" }
+    lignes[indice] = ligne(requete, action, "manquant", 0, action.raison)
+  end
+  return lignes
+end
+
 --- Crée l'objet de fourniture lié au pont ME. `passer(requetes_normalisees)` renvoie les lignes de passe.
 -- `avertissements` liste les problèmes de réglages (exclusions invalides, ignorées).
 function fourniture.creer(pont, reglages)

@@ -98,6 +98,7 @@ local function passer()
   end
   if not fournisseur then messages[#messages + 1] = "Pont ME introuvable" end
 
+  if requetes and not fournisseur then etat.lignes = fourniture.lignes_sans_pont(requetes) end
   if requetes and fournisseur then
     etat.lignes = fournisseur.passer(requetes)
     for _, ligne in ipairs(etat.lignes) do

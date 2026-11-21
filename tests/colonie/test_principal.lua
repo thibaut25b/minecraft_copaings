@@ -97,6 +97,17 @@ return {
     verif.vrai(m.moniteur.chercher("Pont ME introuvable"))
   end,
 
+  -- Non-régression : sans pont ME (début de partie), l'onglet Requêtes restait vide alors que le presse-papiers
+  -- de la colonie listait des requêtes.
+  sans_pont_me_les_requetes_restent_listees = function()
+    local m = monde()
+    m.pont = nil
+    local x = colonne_onglet(m.moniteur, "requetes")
+    lancer(m, 3, { [2] = { "monitor_touch", "top", x, 2 } })
+    verif.vrai(m.moniteur.chercher("16 Planches"), "la requête doit être listée")
+    verif.vrai(m.moniteur.chercher("manquant"), "elle doit être marquée manquante")
+  end,
+
   hors_colonie_l_erreur_s_affiche_et_la_boucle_continue = function()
     local m = monde()
     m.colonie.en_colonie = false
