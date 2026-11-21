@@ -1,4 +1,4 @@
--- Dépôt du solde : l'état de la caisse dans un fichier de l'ordinateur, écrit sans risque de troncature, relu au
+-- Dépôt d'état : une table gardée dans un fichier de l'ordinateur, écrit sans risque de troncature, relu au
 -- démarrage ; un fichier illisible est mis de côté, jamais écrasé.
 
 local depot = {}
@@ -31,7 +31,7 @@ function depot.fichier(chemin)
       if type(etat) == "table" then return etat end
       local copie = chemin .. ".illisible-" .. os.epoch("utc")
       fs.move(chemin, copie)
-      return false, "Solde illisible, copie gardée dans " .. copie .. " : un admin doit regarder."
+      return false, "Fichier illisible, copie gardée dans " .. copie .. " : un admin doit regarder."
     end,
     ecrire = function(etat)
       local fichier = fs.open(provisoire, "w")

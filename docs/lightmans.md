@@ -54,6 +54,8 @@ Mécanisme d'enregistrement : `icc/LCPeripheral` (implémente `IDynamicPeriphera
 | `lc_trade_item` | `setDirection`, `getRestrictionType`, `getSellItems`, `getSellItemDetails`, `setSellItem`, `getBarterItems`, `getBarterItemDetails`, `setBarterItem`, `setEnforceNBT` | `ItemTradeWrapper` |
 | `lc_trade_item_ticket` | `getTicketRecipe`, `setTicketRecipe`, `getTicketCode`, `setTicketCode`, `getTicketDurability`, `setTicketDurability` | `TicketItemTradeWrapper` |
 
+`getSellItems()` (`ItemTradeWrapper.getSellItems`) : toujours 2 tables, une par objet vendu, détails basiques CC (`name`, `count`, `nbt` si présent) ; case vide = détails d'une pile vide (`count` 0, `name` non vérifié) ; case pleine : plus `EnforceNBT` (bool) et `CustomName` (string, si renommé).
+
 Pièges : `setOutputSides` est le nom Lua de la méthode Java `setOutputSide(direction, bool)` ; `setDescription` existe en Java mais n'est pas enregistrée (le nom `setDuration` est enregistré deux fois avec le même lambda), donc pas de `setDescription` en Lua (`PaygateTradeWrapper.registerMethods`). `setTicketPrice` : args `getLong(0)` ticketId, `getInt(1)` couleur, `getString(2)` id d'un item ticket maître.
 
 ### Autres méthodes de trader

@@ -2,7 +2,7 @@
 
 local verif = require("verif")
 local caisse = require("casino.caisse")
-local depot = require("casino.depot")
+local depot = require("commun.depot")
 local systeme = require("faux.systeme")
 
 local REGLES = { depart = 500, recharge = 200 }
