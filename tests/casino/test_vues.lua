@@ -218,6 +218,15 @@ return {
     end
   end,
 
+  -- Solde illisible ou réglage invalide : le bandeau reste affiché, sous les messages passagers.
+  alerte_durable_affichee_au_hall_et_en_jeu = function()
+    local etat, maintenant = jouer({})
+    etat.alerte = "Config : mise_max_monnaie invalide"
+    verif.vrai(dessine(etat, maintenant, 51, 19).chercher("mise_max_monnaie"))
+    etat.ecran = "machine"
+    verif.vrai(dessine(etat, maintenant, 100, 38).chercher("mise_max_monnaie"))
+  end,
+
   crash_encaisser_remplace_jouer_pendant_la_montee = function()
     local etat, maintenant = jouer({ ouvrir("crash"), JOUER, { attendre = 2 } }, { 9000 })
     local m = dessine(etat, maintenant, 51, 19)

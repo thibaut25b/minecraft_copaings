@@ -47,7 +47,17 @@ function session.paliers(min, max)
   return liste
 end
 
---- Remet aux défauts les réglages de mauvais type ou hors bornes ; renvoie la liste des messages.
+-- Bornes des réglages : entiers (mises, jetons) et durées (secondes).
+local PLAFOND_REGLAGE = 1000000000
+local PLAFOND_DUREE = 86400
+
+-- Vrai si `valeur` est un nombre fini entre `bas` et `haut` (faux pour nan et l'infini).
+local function entre(valeur, bas, haut)
+  return valeur >= bas and valeur <= haut
+end
+
+--- Remet aux défauts les réglages de mauvais type ou hors bornes (nan, infini, négatif, non entier) ; renvoie la
+--- liste des messages.
 function session.corriger(reglages, defauts, themes)
   local messages = {}
   local function remettre(cle, raison)
@@ -60,7 +70,9 @@ function session.corriger(reglages, defauts, themes)
   for _, cle in ipairs({ "mise_min", "mise_max", "mise_defaut", "jetons_depart", "recharge", "jeux_blackjack",
     "mise_min_monnaie", "mise_max_monnaie", "mise_defaut_monnaie" }) do
     local valeur = reglages[cle]
-    if valeur ~= math.floor(valeur) or valeur < 1 then remettre(cle, "doit être un entier positif") end
+    if not entre(valeur, 1, PLAFOND_REGLAGE) or valeur ~= math.floor(valeur) then
+      remettre(cle, "doit être un entier de 1 à " .. PLAFOND_REGLAGE)
+    end
   end
   if reglages.mode ~= "demo" and reglages.mode ~= "monnaie" then remettre("mode", "doit valoir demo ou monnaie") end
   for _, piece in ipairs(reglages.pieces) do
@@ -74,14 +86,16 @@ function session.corriger(reglages, defauts, themes)
     remettre("mise_max_monnaie", "est sous mise_min_monnaie")
   end
   for _, cle in ipairs({ "inactivite", "periode_image", "periode_depot", "periode_valeurs" }) do
-    if reglages[cle] <= 0 then remettre(cle, "doit être positif") end
+    if not entre(reglages[cle], 0, PLAFOND_DUREE) or reglages[cle] == 0 then
+      remettre(cle, "doit être entre 0 et " .. PLAFOND_DUREE .. " secondes")
+    end
   end
   if reglages.mise_max < reglages.mise_min then
     remettre("mise_min", "dépasse mise_max")
     if reglages.mise_max < reglages.mise_min then remettre("mise_max", "est sous mise_min") end
   end
-  if reglages.volume < 0 or reglages.volume > 3 then remettre("volume", "hors de 0 à 3") end
-  if reglages.echelle_texte < 0.5 or reglages.echelle_texte > 5 then remettre("echelle_texte", "hors de 0.5 à 5") end
+  if not entre(reglages.volume, 0, 3) then remettre("volume", "hors de 0 à 3") end
+  if not entre(reglages.echelle_texte, 0.5, 5) then remettre("echelle_texte", "hors de 0.5 à 5") end
   local connu = false
   for _, nom in ipairs(themes) do connu = connu or nom == reglages.theme end
   if not connu then remettre("theme", "inconnu") end

@@ -211,11 +211,12 @@ function base.en_pieces(etat, montant)
   return monnaie.decrire(montant, etat.monnaie.pieces, etat.monnaie.valeurs)
 end
 
---- Ligne de message : jeu suspendu (vraie monnaie), sinon le message en cours, sinon `statut` { texte, court,
---- couleur } du jeu.
+--- Ligne de message : jeu suspendu (vraie monnaie), sinon le message en cours, sinon l'alerte durable
+--- (`etat.alerte` : solde illisible, réglage invalide), sinon `statut` { texte, court, couleur } du jeu.
 function base.message(cible, plan, etat, statut, maintenant)
   local message = etat.message
   local texte_ligne, court, couleur = statut.texte, statut.court, statut.couleur
+  if etat.alerte then texte_ligne, court, couleur = etat.alerte, nil, R.alerte end
   if message and maintenant < message.fin then texte_ligne, court, couleur = message.texte, nil, TONS[message.ton] end
   if etat.monnaie and not etat.monnaie.pret then
     texte_ligne, couleur = "Jeu suspendu : " .. etat.monnaie.probleme, R.mauvais

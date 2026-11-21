@@ -25,6 +25,7 @@ local TAILLE_JOURNAL = 50000
 local reglages, erreur_config = config.charger(CHEMIN_CONFIG, defauts)
 local trace = journal.ouvrir(CHEMIN_JOURNAL, TAILLE_JOURNAL)
 local avis = session.corriger(reglages, defauts, theme.NOMS)
+local avis_config = { (erreur_config and "Config : " .. erreur_config) or avis[1] }
 if erreur_config then table.insert(avis, 1, "Config : " .. erreur_config) end
 
 -- En vraie monnaie : mises en crédits, pas de recharge, gains couverts par la réserve, tout est journalisé.
@@ -69,7 +70,7 @@ local etat = session.nouvelle(reglages, livre.solde())
 local function noter_banque()
   if not reelle then return end
   etat.monnaie = { pret = banque.pret, probleme = banque.probleme, reserve = banque.reserve, valeurs = banque.valeurs,
-    pieces = reglages.pieces }
+    pieces = reglages.pieces, encaissable = banque.encaissable, petite = banque.petite }
   etat.solde = livre.solde()
 end
 noter_banque()
@@ -77,6 +78,8 @@ local contexte = { caisse = livre, inactivite = reglages.inactivite, maintenant 
   hasard = function(n) return math.random(n) end }
 for _, texte in ipairs(avis) do trace.info(texte) end
 if #avis > 0 then session.avertir(etat, avis[1], "info", os.clock()) end
+-- Solde illisible ou réglage invalide : un bandeau reste jusqu'au prochain démarrage.
+etat.alerte = erreur_caisse or avis_config[1]
 
 local derniere_erreur
 

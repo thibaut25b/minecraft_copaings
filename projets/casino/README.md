@@ -22,16 +22,19 @@ Q (sur l'ordinateur) ou Ctrl+T arrête le casino.
 
 1. Pose trois coffres : le **dépôt** et la **sortie**, accessibles aux joueurs, et la **réserve**, fermée aux joueurs
    (zone protégée, coffre hors de portée).
-2. Relie l'ordinateur et les trois coffres par des modems filaires et du câble ; fais clic droit sur chaque modem
-   pour l'activer : le chat affiche le nom du coffre (par exemple `minecraft:chest_0`).
+2. Relie l'ordinateur et les trois coffres au **même** réseau de modems filaires ; fais clic droit sur chaque modem
+   pour l'activer : le chat affiche le nom du coffre (par exemple `minecraft:chest_0`). Utilise ces noms réseau,
+   jamais un côté (`left`) : la réserve envoie vers la sortie par ce nom, ce que le casino ne peut pas tester sans
+   déplacer de pièce.
 3. Dans `/casino.cfg`, mets `mode = "monnaie"` et les trois noms dans `depot`, `sortie` et `reserve`.
-4. Garnis la réserve de pièces, petites comprises : elle paie les gains. La mise maximale de chaque jeu suit
-   ce qu'elle contient.
+4. Garnis la réserve de pièces, petites comprises : elle paie les gains. Sans petites pièces, un solde ne se rend
+   pas exactement (« Pas la monnaie exacte »). La mise maximale de chaque jeu suit ce qu'elle contient.
 5. Lance `/casino/diag` : il liste les périphériques, lit les valeurs des pièces et le contenu des coffres sans rien
    déplacer, et écrit `/casino-diag.txt`. Puis redémarre l'ordinateur.
 
 Le joueur dépose ses pièces dans le dépôt (1 crédit = la plus petite pièce), joue, puis touche « Encaisser » au
-hall : les pièces arrivent dans la sortie. S'il manque un coffre ou le mod, le casino reste fermé et dit quoi faire.
+hall : les pièces arrivent dans la sortie. Le solde appartient à la machine, pas à un joueur : qui part sans
+encaisser le laisse au suivant. S'il manque un coffre ou le mod, le casino reste fermé et dit quoi faire.
 
 ## Réglages et fichiers
 

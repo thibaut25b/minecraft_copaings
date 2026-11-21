@@ -56,6 +56,8 @@ for _, role in ipairs(INVENTAIRES) do
   rapport.inventaires[role.cle] = partie
 end
 
+lignes[#lignes + 1] = "Les trois coffres doivent être sur le même réseau filaire et réglés par leur nom réseau "
+  .. "(pas un côté) : la réserve envoie vers la sortie par ce nom, ce que ce diagnostic ne peut pas tester."
 for _, ligne in ipairs(lignes) do print(vers_cc(ligne)) end
 local fichier = fs.open(FICHIER, "w")
 if fichier then

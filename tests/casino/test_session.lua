@@ -229,6 +229,21 @@ return {
     verif.egal(pcall(p.agir, { type = "tricher" }), false)
   end,
 
+  -- Non-régression : un mise_max_monnaie infini, négatif, non entier ou nan donnait des paliers aberrants.
+  reglages_numeriques_aberrants_remis_aux_defauts = function()
+    for _, valeur in ipairs({ math.huge, -5, 2.5, 0 / 0, 1e12 }) do
+      local reglages = copie(defauts)
+      -- 2.5 est un volume valable (0 à 3) : il n'est faux que pour les entiers.
+      local volume_faux = valeur ~= 2.5
+      reglages.mise_max_monnaie, reglages.periode_depot = valeur, valeur
+      if volume_faux then reglages.volume = valeur end
+      local messages = session.corriger(reglages, defauts, { "nuit" })
+      verif.egal(reglages.mise_max_monnaie, defauts.mise_max_monnaie, tostring(valeur))
+      verif.egal(reglages.volume, defauts.volume, tostring(valeur))
+      verif.vrai(#messages >= (volume_faux and 2 or 1), tostring(valeur))
+    end
+  end,
+
   reglages_fautifs_remis_aux_defauts_avec_message = function()
     local reglages = copie(defauts)
     reglages.mise_min, reglages.mise_max, reglages.theme, reglages.volume = 0, "beaucoup", "rose", 9

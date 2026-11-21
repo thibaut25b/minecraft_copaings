@@ -15,7 +15,9 @@ local function copie(pile)
 end
 
 --- Crée l'inventaire `nom` de `taille` emplacements dans `reseau`, rempli de `contenu` ({ [emplacement] = { name,
---- count } }). Champs de test : `panne` (texte : toute méthode lève ce message), `emplacements` (contenu brut).
+--- count } }). Champs de test : `panne` (texte : toute méthode lève ce message), `emplacements` (contenu brut),
+--- `avant_deplacement(emplacement)` (appelé au début de pushItems et pullItems, pour changer le contenu entre
+--- deux appels comme le ferait un joueur ou un entonnoir).
 function coffre.nouveau(reseau, nom, taille, contenu)
   local c = { nom = nom, emplacements = {} }
   for emplacement, pile in pairs(contenu or {}) do c.emplacements[emplacement] = copie(pile) end
@@ -110,6 +112,7 @@ function coffre.nouveau(reseau, nom, taille, contenu)
     local cible = autre(vers)
     emplacement_valide(depuis, "From")
     if vise then emplacement_valide(vise, "To") end
+    if c.avant_deplacement then c.avant_deplacement(depuis) end
     return deplacer(c, depuis, cible, limite, vise)
   end
 
@@ -117,6 +120,7 @@ function coffre.nouveau(reseau, nom, taille, contenu)
     verifier()
     local source = autre(depuis_nom)
     if vise then emplacement_valide(vise, "To") end
+    if source.avant_deplacement then source.avant_deplacement(depuis) end
     return deplacer(source, depuis, c, limite, vise)
   end
 

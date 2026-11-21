@@ -105,7 +105,7 @@ function hall.disposer(largeur, hauteur, etat)
     style = "principal" }
   if etat.monnaie then
     bouton.cle, bouton.action = "encaisser", { type = "encaisser_solde", cle = "encaisser" }
-    bouton.inactif = etat.solde == 0 or not etat.monnaie.pret
+    bouton.inactif = etat.solde == 0 or not (etat.monnaie.pret or etat.monnaie.encaissable)
     bouton.texte = base.choisir("Encaisser " .. texte.quantite(etat.solde, "crédit"), "Encaisser", bouton.largeur)
   else
     bouton.cle, bouton.action = "recharger", { type = "recharger", cle = "recharger" }
@@ -143,6 +143,11 @@ local function dessiner_solde(cible, plan, etat)
     dessin.ecrire(cible, x_droite, zone.y, "Plus gros gain de la session", R.discret, R.surface)
     base.gros(cible, x_droite, zone.y + 2, record, etat.record > 0 and R.bon or R.discret, R.surface, 2)
     if reserve then dessin.ecrire(cible, x_droite, zone.y + 7, reserve, R.info, R.surface) end
+    local petite = etat.monnaie and etat.monnaie.petite
+    if petite and petite > 1 then
+      dessin.ecrire(cible, x_droite, zone.y + 8, "Rendu au plus près de " .. texte.quantite(petite, "crédit"),
+        R.alerte, R.surface)
+    end
     return
   end
   local ligne = "Plus gros gain : " .. record
@@ -211,7 +216,8 @@ function hall.dessiner(cible, plan, etat, maintenant)
   base.message(cible, plan, etat, { texte = "Touche un jeu pour commencer.", couleur = R.discret }, maintenant)
   local place = plan.largeur - plan.mention.x
   local long, court = "Démo : jetons fictifs, sans aucune valeur.", "Démo : jetons fictifs."
-  if etat.monnaie then long, court = "Dépose tes pièces dans le coffre de dépôt.", "Dépose tes pièces." end
+  if etat.monnaie then long, court = "Dépose tes pièces. Encaisse avant de partir : le solde reste ici.",
+    "Encaisse en partant." end
   dessin.ecrire(cible, plan.mention.x, plan.mention.y, dessin.tronquer(base.choisir(long, court, place), place),
     R.alerte, R.fond)
 end

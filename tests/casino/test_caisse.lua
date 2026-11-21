@@ -2,6 +2,8 @@
 
 local verif = require("verif")
 local caisse = require("casino.caisse")
+local depot = require("casino.depot")
+local systeme = require("faux.systeme")
 
 local REGLES = { depart = 500, recharge = 200 }
 
@@ -122,5 +124,31 @@ return {
     verif.egal({ c.recharger() }, { true, 200 })
     verif.egal(c.solde(), 203)
     verif.egal(d.contenu, { solde = 203 })
+  end,
+
+  -- Non-régression : un arrêt en pleine écriture laissait un fichier tronqué, remplacé au démarrage par le solde de
+  -- départ. Le fichier illisible est mis de côté, la caisse le signale pour un admin.
+  fichier_tronque_mis_de_cote_et_signale = function()
+    local disque = systeme.installer()
+    disque.epoch = 42
+    disque.disque["casino.credits"] = "{ solde = 12"
+    local c, _, probleme = caisse.ouvrir(depot.fichier("/casino.credits"), { depart = 0, recharge = 0 })
+    verif.egal(c.solde(), 0)
+    verif.egal(disque.disque["casino.credits.illisible-42"], "{ solde = 12")
+    verif.vrai(probleme:find("admin"), probleme)
+  end,
+
+  -- L'écriture passe par un fichier provisoire renommé ; une version provisoire complète seule est relue.
+  ecriture_par_fichier_provisoire_puis_renomme = function()
+    local disque = systeme.installer()
+    local d = depot.fichier("/casino.credits")
+    verif.egal(d.ecrire({ solde = 7 }), true)
+    verif.egal(d.ecrire({ solde = 8 }), true)
+    verif.egal(disque.disque["casino.credits.tmp"], nil)
+    verif.egal(d.lire(), { solde = 8 })
+    disque.disque["casino.credits"] = nil
+    disque.disque["casino.credits.tmp"] = textutils.serialize({ solde = 9 })
+    verif.egal(d.lire(), { solde = 9 })
+    verif.egal(disque.disque["casino.credits.tmp"], nil)
   end,
 }

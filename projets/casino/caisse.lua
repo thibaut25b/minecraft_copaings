@@ -27,7 +27,7 @@ end
 --- modifier(supplement, gain_prevu) ; recharger() -> true, montant ou false, raison ; crediter(montant) ;
 --- retirer(montant) ; en_cours() -> booléen. Les écritures renvoient true, ou false et la raison.
 function caisse.ouvrir(depot, regles)
-  local etat = depot.lire()
+  local etat, avis_lecture = depot.lire()
   local reprise, probleme
   local unite = regles.unite or "jeton"
   local function enregistrer(nouvel)
@@ -41,7 +41,7 @@ function caisse.ouvrir(depot, regles)
   end
 
   if not lisible(etat) then
-    if etat ~= nil then probleme = "Solde illisible : solde de départ rendu" end
+    if etat ~= nil then probleme = avis_lecture or "Solde illisible : solde de départ rendu" end
     enregistrer({ solde = regles.depart })
   end
   if etat.en_cours then

@@ -75,7 +75,7 @@ return {
     verif.egal(m.caisse.solde(), 350)
     verif.egal(m.depot.emplacements, {})
     verif.egal(m.banque.reserve, 350)
-    verif.vrai(m.journal_contient("Dépôt : 3 x " .. OR .. " rangées"))
+    verif.vrai(m.journal_contient("Dépôt : 3 x " .. OR .. " vu, 3 objets poussés"), table.concat(m.journal, " | "))
     verif.vrai(m.journal_contient("+300 crédits, solde 300"), table.concat(m.journal, " | "))
     verif.vrai(m.journal_contient("+50 crédits, solde 350"), table.concat(m.journal, " | "))
   end,
@@ -138,21 +138,115 @@ return {
     verif.egal(m.caisse.solde(), 0)
   end,
 
-  solde_ecrit_avant_chaque_lot_et_panne_d_envoi_au_profit_de_la_maison = function()
+  -- Non-régression : une erreur d'envoi définitive (sortie hors du réseau de la réserve) faisait perdre le lot à
+  -- chaque appui sur Encaisser ; la réserve relue montre que rien n'est sorti, le solde est recrédité.
+  envoi_en_erreur_rien_sorti_solde_ecrit_avant_puis_recredite = function()
     local m = monde({ solde = 300, reserve = { [1] = { name = OR, count = 5 } } })
     local ecritures = {}
-    local origine = m.reserve.pushItems
-    m.reserve.pushItems = function(...)
+    m.reserve.pushItems = function()
       ecritures[#ecritures + 1] = m.fichier.solde
       error("Target 'sortie' does not exist", 0)
     end
     local verse, message = m.banque.encaisser(m.caisse)
     verif.egal(ecritures, { 0 }, "le solde est écrit diminué avant l'envoi")
     verif.egal(verse, 0)
-    verif.egal(m.caisse.solde(), 0)
+    verif.egal(m.caisse.solde(), 300)
+    verif.vrai(message:find("Envoi impossible"), message)
+    verif.vrai(m.journal_contient("+300 crédits rendus au solde"), table.concat(m.journal, " | "))
+  end,
+
+  -- Seul cas incertain : la réserve devient illisible pendant l'envoi ; rien n'est recrédité, le journal le dit.
+  reserve_illisible_apres_envoi_encaissement_incertain_au_profit_de_la_maison = function()
+    local m = monde({ solde = 300, reserve = { [1] = { name = OR, count = 5 } } })
+    m.reserve.avant_deplacement = function() m.reserve.panne = "chunk déchargé" end
+    local verse, message = m.banque.encaisser(m.caisse)
+    verif.egal({ verse, m.caisse.solde() }, { 0, 0 })
     verif.vrai(message:find("admin"), message)
-    verif.vrai(m.journal_contient("envoi incertain de 3 x " .. OR), table.concat(m.journal, "\n"))
-    m.reserve.pushItems = origine
+    verif.vrai(m.journal_contient("Encaissement incertain : 3 x " .. OR), table.concat(m.journal, " | "))
+  end,
+
+  -- Non-régression de la faille : le joueur remplace 1 netherite par 1 cuivre entre le relevé et l'envoi ; il
+  -- était crédité de 100 000. Le crédit est ce que la réserve a gagné : 1.
+  echange_netherite_contre_cuivre_au_depot_credite_la_valeur_reelle = function()
+    local NETHERITE = "lightmanscurrency:coin_netherite"
+    local m = monde({ depot = { [1] = { name = NETHERITE, count = 1 } } })
+    m.depot.avant_deplacement = function(emplacement)
+      m.depot.emplacements[emplacement] = { name = CUIVRE, count = 1 }
+    end
+    verif.egal((m.banque.relever(m.caisse)), 1)
+    verif.egal(m.caisse.solde(), 1)
+  end,
+
+  -- Même échange dans l'autre sens : un objet refusé (terre) remplacé par une netherite part vers la sortie, rien
+  -- n'est crédité et aucune valeur n'apparaît.
+  echange_terre_contre_netherite_objet_refuse_ne_credite_rien = function()
+    local NETHERITE = "lightmanscurrency:coin_netherite"
+    local m = monde({ depot = { [1] = { name = "minecraft:dirt", count = 1 } } })
+    m.depot.avant_deplacement = function(emplacement)
+      m.depot.emplacements[emplacement] = { name = NETHERITE, count = 1 }
+    end
+    m.banque.relever(m.caisse)
+    verif.egal(m.caisse.solde(), 0)
+    verif.egal(m.sortie.compter(NETHERITE), 1)
+  end,
+
+  -- L'encaissement débite ce qui sort réellement : 3 or prévus, un seul part, 200 crédits rendus.
+  encaissement_debite_ce_qui_sort_reellement = function()
+    local m = monde({ solde = 300, taille_sortie = 1, sortie = { [1] = { name = OR, count = 63 } },
+      reserve = { [1] = { name = OR, count = 5 } } })
+    local verse = m.banque.encaisser(m.caisse)
+    verif.egal({ verse, m.caisse.solde() }, { 100, 200 })
+  end,
+
+  -- Un relevé qui rend la main ne laisse pas un encaissement s'intercaler.
+  releve_et_encaissement_ne_s_entrelacent_pas = function()
+    local m = monde({ solde = 100, reserve = { [1] = { name = OR, count = 5 } },
+      depot = { [1] = { name = OR, count = 1 } } })
+    local pendant
+    m.depot.avant_deplacement = function() pendant = { m.banque.encaisser(m.caisse) } end
+    m.banque.relever(m.caisse)
+    verif.egal(pendant, { 0, "Opération en cours, réessaie." })
+    verif.egal(m.caisse.solde(), 200)
+  end,
+
+  -- Deux rôles sur le même coffre (dépôt = réserve, sortie = réserve) : configuration refusée.
+  coffres_de_meme_nom_refuses = function()
+    local m = monde({ reglages = { depot = "reserve" } })
+    verif.egal(m.banque.pret, false)
+    verif.vrai(m.banque.probleme:find("même nom « reserve »", 1, true), m.banque.probleme)
+    local s = monde({ reglages = { sortie = "reserve" } })
+    verif.egal(s.banque.pret, false)
+  end,
+
+  -- Coffre de dépôt disparu : le jeu est suspendu mais le joueur peut encore encaisser.
+  encaissement_possible_sans_coffre_de_depot = function()
+    local m = monde({ solde = 200, reserve = { [1] = { name = OR, count = 5 } } })
+    m.reseau.inventaires.depot = nil
+    verif.egal(m.banque.verifier(), false)
+    verif.egal(m.banque.encaissable, true)
+    verif.egal({ m.banque.encaisser(m.caisse) }, { 200 })
+    verif.egal(m.sortie.compter(OR), 2)
+  end,
+
+  -- Un objet refusé qui ne peut pas partir (sortie pleine) n'est annoncé qu'une fois tant qu'il reste.
+  objet_refuse_bloque_annonce_une_seule_fois = function()
+    local m = monde({ taille_sortie = 1, sortie = { [1] = { name = "minecraft:stone", count = 64 } },
+      depot = { [3] = { name = "minecraft:dirt", count = 1 } } })
+    local _, premiers = m.banque.relever(m.caisse)
+    local _, suivants = m.banque.relever(m.caisse)
+    verif.egal(#premiers, 1)
+    verif.egal(suivants, {})
+  end,
+
+  -- Une relecture où lc_money ne répond plus pour l'or garde la valeur connue et le journalise.
+  relecture_partielle_garde_les_valeurs_connues = function()
+    local m = monde({ reserve = { [1] = { name = OR, count = 10 } } })
+    m.api.valeurs[OR] = nil
+    verif.egal(m.banque.lire_valeurs(), true)
+    verif.egal(m.banque.valeurs[OR], 100)
+    m.banque.verifier()
+    verif.egal(m.banque.reserve, 1000)
+    verif.vrai(m.journal_contient("ne donne plus de valeur pour : or"), table.concat(m.journal, " | "))
   end,
 
   panne_ou_coffre_absent_suspend_le_jeu_avec_le_nom = function()
