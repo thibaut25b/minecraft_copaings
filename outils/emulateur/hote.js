@@ -94,17 +94,25 @@ function appeler(objet, methode, ...args) {
 // ------------------------------------------------------------------------------------------- Son
 
 let audio = null;
+let sonEnPanne = false;
 function son(Letat) {
   const frequence = lua.lua_tonumber(Letat, 1), volume = lua.lua_tonumber(Letat, 2), duree = lua.lua_tonumber(Letat, 3);
-  audio = audio || new AudioContext();
-  const oscillateur = audio.createOscillator(), gain = audio.createGain();
-  oscillateur.type = "square";
-  oscillateur.frequency.value = frequence;
-  gain.gain.setValueAtTime(0.15 * volume + 0.0001, audio.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + duree);
-  oscillateur.connect(gain).connect(audio.destination);
-  oscillateur.start();
-  oscillateur.stop(audio.currentTime + duree);
+  // Une exception JavaScript traverserait les pcall du programme et l'arrêterait : un bip raté ne doit rien casser.
+  try {
+    audio = audio || new AudioContext();
+    const oscillateur = audio.createOscillator(), gain = audio.createGain();
+    oscillateur.type = "square";
+    oscillateur.frequency.value = frequence;
+    gain.gain.setValueAtTime(0.15 * volume + 0.0001, audio.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + duree);
+    oscillateur.connect(gain);
+    gain.connect(audio.destination);
+    oscillateur.start();
+    oscillateur.stop(audio.currentTime + duree);
+  } catch (erreur) {
+    if (!sonEnPanne) incidents.push(new Date().toLocaleTimeString() + " Son indisponible : " + (erreur.stack || erreur));
+    sonEnPanne = true;
+  }
   return 0;
 }
 
