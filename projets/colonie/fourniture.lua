@@ -8,6 +8,8 @@ local fourniture = {}
 -- Méthodes de l'objet tâche de `craftItem` : un `true` dit que la tâche a échoué, ou qu'elle s'est arrêtée normalement.
 local ECHECS_DE_TACHE = { "hasErrorOccurred", "isCalculationNotSuccessful" }
 local FINS_DE_TACHE = { "isDone", "isCanceled" }
+-- Nombre de passes où une requête servie peut manquer à la liste avant que sa livraison soit oubliée.
+local PASSES_AVANT_OUBLI = 3
 
 local function copier(table_source, modifs)
   local copie = {}
@@ -40,16 +42,16 @@ local function ligne(requete, action, statut, livre, message)
 end
 
 --- Crée l'objet de fourniture lié au pont ME. `passer(requetes_normalisees)` renvoie les lignes de passe.
--- `avertissements` liste les problèmes de réglages (motifs d'exclusion invalides, ignorés).
+-- `avertissements` liste les problèmes de réglages (exclusions invalides, ignorées).
 function fourniture.creer(pont, reglages)
   local valides, invalides = requetes.trier_motifs(reglages.exclusions)
   local regles = copier(reglages, { exclusions = valides })
-  local servies = {} -- id -> { action, livre } : cumul exporté pour une requête encore listée
-  local taches = {}  -- nom d'item -> objet tâche lancé par `craftItem`
+  local servies = {} -- id -> { action, livre, absences } : cumul exporté pour une requête encore listée
+  local taches = {}  -- nom d'item -> { objet, sursis } : tâche lancée par `craftItem`
   local echecs = {}  -- nom d'item -> { message, a_montrer } : dernière fabrication échouée
   local objet = { avertissements = {} }
   for _, motif in ipairs(invalides) do
-    objet.avertissements[#objet.avertissements + 1] = "Motif d'exclusion invalide ignoré : " .. motif
+    objet.avertissements[#objet.avertissements + 1] = "Exclusion invalide ignorée : " .. motif
   end
 
   local function lire_en_cours()
@@ -65,12 +67,20 @@ function fourniture.creer(pont, reglages)
     local en_cours = {}
     for nom in pairs(listees) do en_cours[nom] = true end
     for nom, tache in pairs(taches) do
-      local etat = etat_tache(tache)
+      local etat = etat_tache(tache.objet)
       if etat == "echec" then
-        echecs[nom] = { message = message_d_echec(tache), a_montrer = true }
+        echecs[nom] = { message = message_d_echec(tache.objet), a_montrer = true }
         taches[nom] = nil
-      elseif etat == "finie" or (etat == nil and not listees[nom]) then
+      elseif etat == "finie" then
         taches[nom] = nil
+      elseif etat == nil and not listees[nom] then
+        -- Objet illisible et tâche non listée : le calcul AE2 n'est pas listé non plus, d'où une passe de sursis.
+        if tache.sursis then
+          tache.sursis = false
+          en_cours[nom] = true
+        else
+          taches[nom] = nil
+        end
       else
         en_cours[nom] = true
       end
@@ -98,7 +108,7 @@ function fourniture.creer(pont, reglages)
     stocks[action.item].quantite = stocks[action.item].quantite - sorti
     echecs[action.item] = nil
     local total = cumul + sorti
-    servies[requete.id] = { action = action, livre = total }
+    servies[requete.id] = { action = action, livre = total, absences = 0 }
     if total < requete.quantite_min then
       return ligne(requete, action, "partiel", total, total .. " sur " .. requete.quantite_min .. " sortis")
     end
@@ -113,7 +123,7 @@ function fourniture.creer(pont, reglages)
     elseif tache == nil then
       message = "Fabrication refusée (" .. tostring(code) .. ")"
     else
-      taches[nom] = tache
+      taches[nom] = { objet = tache, sursis = true }
       echecs[nom] = nil
       return
     end
@@ -182,8 +192,9 @@ function fourniture.creer(pont, reglages)
 
     for _, nom in ipairs(ordre) do lancer(nom, commandes[nom]) end
     for _, echec in pairs(echecs) do echec.a_montrer = false end
-    for id in pairs(servies) do
-      if not presentes[id] then servies[id] = nil end
+    for id, servie in pairs(servies) do
+      servie.absences = presentes[id] and 0 or servie.absences + 1
+      if servie.absences > PASSES_AVANT_OUBLI then servies[id] = nil end
     end
     return lignes
   end

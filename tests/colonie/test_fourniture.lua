@@ -104,11 +104,22 @@ return {
     verif.egal(faux_pont.appels_de(etat, "craftItem"), { { { name = PLANCHE, count = 11 } } })
   end,
 
-  id_disparu_est_oublie_et_peut_etre_resservi = function()
+  -- Non-régression : une requête absente d'une seule lecture (changement de résolveur) était livrée deux fois.
+  id_absent_une_passe_puis_revenu_n_est_pas_relivre = function()
     local objet, etat = preparer()
     etat.stock[PLANCHE] = 64
     objet.passer({ requete("a", 16) })
     objet.passer({})
+    local lignes = objet.passer({ requete("a", 16) })
+    verif.egal({ lignes[1].statut, lignes[1].message }, { "livre", "en attente du coursier" })
+    verif.egal(#faux_pont.appels_de(etat, "exportItem"), 1)
+  end,
+
+  id_disparu_durablement_est_oublie_et_peut_etre_resservi = function()
+    local objet, etat = preparer()
+    etat.stock[PLANCHE] = 64
+    objet.passer({ requete("a", 16) })
+    for _ = 1, 4 do objet.passer({}) end
     local lignes = objet.passer({ requete("a", 16) })
     verif.egal({ lignes[1].statut, lignes[1].message }, { "livre", "" })
     verif.egal(#faux_pont.appels_de(etat, "exportItem"), 2)
@@ -223,7 +234,19 @@ return {
     etat.taches[1].etat = "en_cours"
     verif.egal(objet.passer({ requete("a", 16) })[1].action.type, "attendre")
     etat.taches[1].etat = "fini"
+    verif.egal(objet.passer({ requete("a", 16) })[1].action.type, "attendre", "passe de sursis")
     verif.egal(objet.passer({ requete("a", 16) })[1].action.type, "fabriquer")
+  end,
+
+  -- Non-régression : pendant le calcul AE2 la tâche n'est pas listée, la fabrication était lancée deux fois.
+  objet_tache_illisible_pendant_le_calcul_ne_relance_pas_la_fabrication = function()
+    local objet, etat = preparer()
+    etat.fabricables[PLANCHE] = true
+    etat.objets_illisibles = true
+    objet.passer({ requete("a", 16) })
+    verif.egal(etat.taches[1].etat, "calcul")
+    verif.egal(objet.passer({ requete("a", 16) })[1].action.type, "attendre")
+    verif.egal(#faux_pont.appels_de(etat, "craftItem"), 1)
   end,
 
   tache_listee_par_le_pont_bloque_la_fabrication_sans_memoire = function()
@@ -307,15 +330,15 @@ return {
   end,
 
   motif_d_exclusion_invalide_est_ignore_et_signale_sans_planter_la_passe = function()
-    local objet, etat = preparer({ exclusions = { "[", "_sapling$" } })
+    local objet, etat = preparer({ exclusions = { 42, "*_sapling" } })
     etat.stock[PLANCHE] = 64
     verif.egal(objet.passer({ requete("a", 16) })[1].statut, "livre")
     verif.egal(#objet.avertissements, 1)
-    contient(objet.avertissements[1], "[")
+    contient(objet.avertissements[1], "42")
   end,
 
   requete_exclue_est_ignoree_sans_export = function()
-    local objet, etat = preparer({ exclusions = { "_planks$" } })
+    local objet, etat = preparer({ exclusions = { "*_planks" } })
     etat.stock[PLANCHE] = 64
     local lignes = objet.passer({ requete("a", 16) })
     verif.egal({ lignes[1].statut, lignes[1].message }, { "ignore", "exclu par les réglages" })

@@ -20,14 +20,17 @@ local trace = journal.ouvrir(CHEMIN_JOURNAL, TAILLE_JOURNAL)
 
 local etat = { heure = "", page = "resume", colonie = nil, lignes = {}, prochaine_passe = 0, erreurs = {} }
 -- Les erreurs sont rangées par origine : une boucle remplace les siennes sans effacer celles des autres.
-local erreurs = { config = erreur_config and { "Config : " .. erreur_config } or {}, colonie = {}, passe = {}, alarme = {} }
+local ORIGINES = { "config", "colonie", "passe", "alarme", "ecran", "interne" }
+local erreurs = { config = erreur_config and { "Config : " .. erreur_config } or {} }
+for _, origine in ipairs(ORIGINES) do erreurs[origine] = erreurs[origine] or {} end
+local internes = {} -- nom d'étape -> message de sa dernière erreur inattendue
 local deja_journalisees = {}
 local fournisseur = nil
 local echeance_passe = os.clock()
 
 local function rassembler_erreurs()
   local liste = {}
-  for _, origine in ipairs({ "config", "colonie", "passe", "alarme" }) do
+  for _, origine in ipairs(ORIGINES) do
     for _, message in ipairs(erreurs[origine]) do liste[#liste + 1] = message end
   end
   return liste
@@ -41,6 +44,15 @@ local function journaliser_erreurs()
     if not deja_journalisees[message] then trace.erreur(message) end
   end
   deja_journalisees = presentes
+end
+
+-- Exécute une étape d'une boucle sans laisser mourir sa coroutine (une boucle morte arrêterait tout le programme) :
+-- l'erreur inattendue s'affiche et se journalise, l'étape sera retentée au tour suivant.
+local function proteger(nom, etape, ...)
+  local ok, message = pcall(etape, ...)
+  internes[nom] = (not ok) and ("Erreur (" .. nom .. ") : " .. tostring(message)) or nil
+  erreurs.interne = {}
+  for _, texte in pairs(internes) do erreurs.interne[#erreurs.interne + 1] = texte end
 end
 
 local function cote_valide(cote)
@@ -101,7 +113,8 @@ end
 local function cible_affichage()
   local moniteur = peripheriques.trouver(peripheriques.TYPES.moniteur)
   if not moniteur then return term.current(), false end
-  moniteur.setTextScale(reglages.echelle_texte)
+  local ok, message = peripheriques.appel(moniteur, "setTextScale", reglages.echelle_texte)
+  erreurs.ecran = ok and {} or { "echelle_texte refusée : " .. tostring(message) }
   return moniteur, true
 end
 
@@ -117,7 +130,7 @@ end
 local function boucle_fourniture()
   while true do
     echeance_passe = os.clock() + reglages.periode_fourniture
-    passer()
+    proteger("fourniture", passer)
     os.queueEvent(EVENEMENT_AFFICHAGE)
     sleep(reglages.periode_fourniture)
   end
@@ -125,7 +138,7 @@ end
 
 local function boucle_colonie()
   while true do
-    lire_colonie()
+    proteger("colonie", lire_colonie)
     os.queueEvent(EVENEMENT_AFFICHAGE)
     sleep(reglages.periode_affichage)
   end
@@ -134,18 +147,22 @@ end
 local REDESSINER = { [EVENEMENT_AFFICHAGE] = true, monitor_resize = true, term_resize = true }
 
 -- Un toucher du moniteur (ou un clic sur le terminal quand il sert d'écran) change de page.
+local function reagir(evenement, x, y)
+  local cible, sur_moniteur = cible_affichage()
+  local touche = (evenement == "monitor_touch" and sur_moniteur) or (evenement == "mouse_click" and not sur_moniteur)
+  if touche then
+    etat.page = vues.page_touchee(cible, x, y) or etat.page
+    afficher()
+  elseif REDESSINER[evenement] then
+    afficher()
+  end
+end
+
 local function boucle_affichage()
-  afficher()
+  proteger("affichage", afficher)
   while true do
     local evenement, _, x, y = os.pullEvent()
-    local cible, sur_moniteur = cible_affichage()
-    local touche = (evenement == "monitor_touch" and sur_moniteur) or (evenement == "mouse_click" and not sur_moniteur)
-    if touche then
-      etat.page = vues.page_touchee(cible, x, y) or etat.page
-      afficher()
-    elseif REDESSINER[evenement] then
-      afficher()
-    end
+    proteger("affichage", reagir, evenement, x, y)
   end
 end
 

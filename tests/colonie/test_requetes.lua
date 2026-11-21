@@ -146,9 +146,26 @@ return {
     verif.egal(a, { type = "manquant", quantite = 0, raison = "aucun item exploitable" })
   end,
 
-  trier_motifs_ecarte_un_motif_invalide_sans_lever = function()
-    local valides, invalides = requetes.trier_motifs({ "^minecraft:.*_sapling$", "[", "%", 42 })
-    verif.egal(valides, { "^minecraft:.*_sapling$" })
-    verif.egal(invalides, { "[", "%", "42" })
+  trier_motifs_ecarte_ce_qui_n_est_pas_un_texte = function()
+    local motifs, invalides = requetes.trier_motifs({ "minecraft:*_sapling", "", 42 })
+    verif.egal(#motifs, 1)
+    verif.egal(invalides, { "", "42" })
+  end,
+
+  exclusion_avec_etoile_couvre_toute_la_famille_et_rien_d_autre = function()
+    local motifs = requetes.trier_motifs({ "minecraft:*_sapling" })
+    verif.vrai(("minecraft:oak_sapling"):find(motifs[1]))
+    verif.vrai(not ("minecraft:oak_sapling_block"):find(motifs[1]))
+    verif.vrai(not ("mod:minecraft:oak_sapling"):find(motifs[1]))
+  end,
+
+  -- Non-régression : « a% » ou « x[a » passaient la validation puis levaient à la première requête.
+  exclusion_aux_caracteres_speciaux_ne_leve_jamais = function()
+    for _, exclusion in ipairs({ "a%", "x[a", "(", "%", "[", "mod:item-1.0+x?", "^$" }) do
+      local motifs = requetes.trier_motifs({ exclusion })
+      local a = requetes.decider(requete({ candidats = { exclusion, "minecraft:foo" } }),
+        { ["minecraft:foo"] = { quantite = 99, fabricable = false } }, regles({ exclusions = motifs }), {})
+      verif.egal({ a.type, a.item }, { "livrer", "minecraft:foo" }, "exclusion « " .. exclusion .. " »")
+    end
   end,
 }

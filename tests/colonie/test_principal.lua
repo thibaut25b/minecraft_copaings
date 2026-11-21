@@ -16,7 +16,11 @@ local function monde()
   m.pont, m.etat_pont = faux_pont.creer()
   m.integrateur, m.colonie = faux_integrateur.creer()
   m.moniteur = faux_moniteur.nouveau(60, 24)
-  m.moniteur.setTextScale = function(echelle) m.echelle = echelle end
+  -- Comme CC : une échelle hors de 0.5 à 5 lève une erreur.
+  m.moniteur.setTextScale = function(echelle)
+    if type(echelle) ~= "number" or echelle < 0.5 or echelle > 5 then error("Expected number in range 0.5-5", 0) end
+    m.echelle = echelle
+  end
   m.etat_pont.stock["minecraft:oak_planks"] = 64
   m.colonie.requetes = { {
     id = "r1", displayName = "16 Planches", description = "", state = "IN_PROGRESS", count = 16, minCount = 16,
@@ -28,7 +32,7 @@ end
 
 -- Lance le point d'entrée : chaque boucle est une coroutine, reprise `tours` fois ; `evenements[tour]` est
 -- l'événement distribué à ce tour (un simple timer sinon).
-local function lancer(m, tours, evenements)
+local function lancer(m, tours, evenements, saboter)
   local presents = { colony_integrator = m.integrateur, me_bridge = m.pont, monitor = m.moniteur }
   peripheral = { find = function(type_voulu) return presents[type_voulu] end }
   term = { current = function() return m.terminal end }
@@ -36,6 +40,7 @@ local function lancer(m, tours, evenements)
     getSides = function() return { "top", "bottom", "left", "right", "front", "back" } end,
     setOutput = function(cote, actif) m.redstone[cote] = actif end,
   }
+  if saboter then saboter() end
   textutils.formatTime = function() return "12:30" end
   os.time = function() return 12.5 end
   os.queueEvent = function() end
@@ -122,10 +127,29 @@ return {
     verif.vrai(m.moniteur.chercher("cote_alarme inconnu"))
   end,
 
+  -- Non-régression : une échelle invalide dans la config tuait le programme au démarrage.
+  echelle_de_texte_invalide_est_signalee_sans_arreter_le_programme = function()
+    local m = monde()
+    m.disque.disque["colonie.cfg"] = textutils.serialize({ echelle_texte = 8 })
+    lancer(m, 3)
+    verif.vrai(m.moniteur.chercher("echelle_texte"))
+    verif.egal(m.etat_pont.livre["minecraft:oak_planks"], 16)
+  end,
+
+  -- Non-régression : une erreur inattendue dans une boucle arrêtait les trois.
+  erreur_inattendue_d_une_boucle_n_arrete_pas_les_autres = function()
+    local m = monde()
+    m.disque.disque["colonie.cfg"] = textutils.serialize({ cote_alarme = "back" })
+    lancer(m, 3, nil, function() redstone.setOutput = function() error("redstone en panne", 0) end end)
+    verif.vrai(m.moniteur.chercher("redstone en panne"), "l'erreur doit être à l'écran")
+    verif.egal(m.etat_pont.livre["minecraft:oak_planks"], 16)
+    verif.vrai(m.disque.disque["colonie.log"]:find("redstone en panne", 1, true), "l'erreur doit être journalisée")
+  end,
+
   motif_d_exclusion_invalide_est_signale_a_l_ecran = function()
     local m = monde()
-    m.disque.disque["colonie.cfg"] = textutils.serialize({ exclusions = { "[" } })
+    m.disque.disque["colonie.cfg"] = textutils.serialize({ exclusions = { 42 } })
     lancer(m, 2)
-    verif.vrai(m.moniteur.chercher("exclusion invalide"))
+    verif.vrai(m.moniteur.chercher("Exclusion invalide"))
   end,
 }

@@ -66,18 +66,24 @@ function requetes.normaliser(brutes, batiments)
   return liste
 end
 
---- Sépare les motifs d'exclusion utilisables des motifs Lua mal formés : renvoie `valides, invalides`.
--- Le `pcall` ne couvre que `string.find` sur un motif fourni par la config.
-function requetes.trier_motifs(motifs)
-  local valides, invalides = {}, {}
-  for _, motif in ipairs(motifs or {}) do
-    if type(motif) == "string" and pcall(string.find, "", motif) then
-      valides[#valides + 1] = motif
+-- Une exclusion est un nom d'item où `*` remplace n'importe quelle suite : elle devient un motif Lua ancré,
+-- tout autre caractère spécial étant échappé.
+local function motif_lua(exclusion)
+  local echappe = exclusion:gsub("[%^%$%(%)%%%.%[%]%+%-%?]", "%%%0")
+  return "^" .. echappe:gsub("%*", ".*") .. "$"
+end
+
+--- Convertit les exclusions des réglages en motifs Lua : renvoie `motifs, invalides` (invalide : vide ou pas un texte).
+function requetes.trier_motifs(exclusions)
+  local motifs, invalides = {}, {}
+  for _, exclusion in ipairs(exclusions or {}) do
+    if type(exclusion) == "string" and exclusion ~= "" then
+      motifs[#motifs + 1] = motif_lua(exclusion)
     else
-      invalides[#invalides + 1] = tostring(motif)
+      invalides[#invalides + 1] = tostring(exclusion)
     end
   end
-  return valides, invalides
+  return motifs, invalides
 end
 
 local function exclu(nom, motifs)
