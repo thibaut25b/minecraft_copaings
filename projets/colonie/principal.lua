@@ -8,6 +8,7 @@ local peripheriques = require("commun.peripheriques")
 local defauts = require("colonie.reglages")
 local lecture = require("colonie.lecture")
 local fourniture = require("colonie.fourniture")
+local chantiers = require("colonie.chantiers")
 local vues = require("colonie.vues")
 
 local CHEMIN_CONFIG = "/colonie.cfg"
@@ -18,11 +19,19 @@ local EVENEMENT_AFFICHAGE = "colonie_affichage"
 local reglages, erreur_config = config.charger(CHEMIN_CONFIG, defauts)
 local trace = journal.ouvrir(CHEMIN_JOURNAL, TAILLE_JOURNAL)
 
-local etat = { heure = "", page = "resume", colonie = nil, lignes = {}, prochaine_passe = 0, erreurs = {} }
 -- Les erreurs sont rangées par origine : une boucle remplace les siennes sans effacer celles des autres.
-local ORIGINES = { "config", "colonie", "passe", "alarme", "ecran", "interne" }
+local ORIGINES = { "config", "bascule", "colonie", "passe", "alarme", "ecran", "interne" }
 local erreurs = { config = erreur_config and { "Config : " .. erreur_config } or {} }
 for _, origine in ipairs(ORIGINES) do erreurs[origine] = erreurs[origine] or {} end
+if type(reglages.livraison_chantiers) ~= "table" then
+  erreurs.config[#erreurs.config + 1] = "Config : livraison_chantiers doit être une table, ignorée"
+  reglages.livraison_chantiers = {}
+end
+
+local etat = {
+  heure = "", page = "resume", colonie = nil, lignes = {}, prochaine_passe = 0, erreurs = {},
+  constructeurs = nil, constructeur = nil, lignes_chantiers = {}, livraison = reglages.livraison_chantiers,
+}
 local internes = {} -- nom d'étape -> message de sa dernière erreur inattendue
 local deja_journalisees = {}
 local fournisseur = nil
@@ -86,6 +95,11 @@ local function passer()
   local integrateur = peripheriques.trouver(peripheriques.TYPES.integrateur)
   local requetes, message = lecture.requetes(integrateur)
   if not requetes then messages[#messages + 1] = "Requêtes : " .. tostring(message) end
+  local constructeurs, message_chantiers = lecture.constructeurs(integrateur)
+  if not constructeurs then messages[#messages + 1] = "Chantiers : " .. tostring(message_chantiers) end
+  etat.constructeurs = constructeurs
+  etat.constructeur = chantiers.choisir(constructeurs, etat.constructeur)
+  local passe = chantiers.composer(requetes, constructeurs, reglages.livraison_chantiers)
 
   if not fournisseur then
     local pont = peripheriques.trouver(peripheriques.TYPES.pont_me)
@@ -98,15 +112,26 @@ local function passer()
   end
   if not fournisseur then messages[#messages + 1] = "Pont ME introuvable" end
 
-  if requetes and not fournisseur then etat.lignes = fourniture.lignes_sans_pont(requetes) end
-  if requetes and fournisseur then
-    etat.lignes = fournisseur.passer(requetes)
-    for _, ligne in ipairs(etat.lignes) do
-      if ligne.statut == "erreur" then
-        messages[#messages + 1] = ligne.requete.libelle .. " : " .. ligne.message
-      end
+  -- Une seule passe pour les requêtes ordinaires et les chantiers : un seul stock, une seule mémoire.
+  local lignes
+  if fournisseur then
+    lignes = fournisseur.passer(passe.a_servir)
+  else
+    lignes = fourniture.lignes_sans_pont(passe.a_servir)
+  end
+  for _, ligne in ipairs(lignes) do
+    if ligne.statut == "erreur" then
+      messages[#messages + 1] = ligne.requete.libelle .. " : " .. ligne.message
     end
   end
+  local ordinaires, par_constructeur = chantiers.repartir(lignes)
+  if requetes then
+    for _, ecartee in ipairs(fourniture.lignes_ignorees(passe.ecartees, "livrée par l'onglet Chantiers")) do
+      ordinaires[#ordinaires + 1] = ecartee
+    end
+    etat.lignes = ordinaires
+  end
+  etat.lignes_chantiers = par_constructeur
   erreurs.passe = messages
 end
 
@@ -147,12 +172,28 @@ end
 
 local REDESSINER = { [EVENEMENT_AFFICHAGE] = true, monitor_resize = true, term_resize = true }
 
--- Un toucher du moniteur (ou un clic sur le terminal quand il sert d'écran) change de page.
+-- Bascule la livraison automatique d'un constructeur et l'enregistre, sauf si le fichier de config est fautif.
+local function basculer_livraison(cle)
+  local livraison = reglages.livraison_chantiers
+  livraison[cle] = (livraison[cle] ~= true) or nil
+  if erreur_config then
+    erreurs.bascule = { "Livraison des chantiers non enregistrée : corrige d'abord " .. CHEMIN_CONFIG }
+    return
+  end
+  local ok, message = config.enregistrer(CHEMIN_CONFIG, reglages)
+  erreurs.bascule = ok and {} or { "Livraison des chantiers non enregistrée : " .. tostring(message) }
+end
+
+-- Un toucher du moniteur (ou un clic sur le terminal quand il sert d'écran) change de page, de constructeur, ou
+-- bascule la livraison du constructeur montré.
 local function reagir(evenement, x, y)
   local cible, sur_moniteur = cible_affichage()
   local touche = (evenement == "monitor_touch" and sur_moniteur) or (evenement == "mouse_click" and not sur_moniteur)
   if touche then
-    etat.page = vues.page_touchee(cible, x, y) or etat.page
+    local action = vues.action_touchee(cible, etat, x, y)
+    if action and action.type == "page" then etat.page = action.page end
+    if action and action.type == "constructeur" then etat.constructeur = action.cle end
+    if action and action.type == "livraison" then basculer_livraison(action.cle) end
     afficher()
   elseif REDESSINER[evenement] then
     afficher()

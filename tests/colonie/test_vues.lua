@@ -6,7 +6,7 @@ local verif = require("verif")
 local vues = require("colonie.vues")
 local moniteur = require("faux.moniteur")
 
-local PAGES = { "resume", "requetes", "travaux", "habitants" }
+local PAGES = { "resume", "requetes", "travaux", "chantiers", "habitants" }
 
 local function ligne_passe(demandeur, statut, livre, quantite, message)
   return {
@@ -65,8 +65,36 @@ local function couleur_de(m, motif)
   return m.couleur_texte(x, y)
 end
 
+local function page_touchee(m, etat, x, y)
+  local action = vues.action_touchee(m, etat, x, y)
+  return action and action.type == "page" and action.page or nil
+end
+
+-- Page Chantiers : `nombre` constructeurs (1 par défaut), chacun avec Pierre complète puis Terre en manque.
+local function etat_chantiers(options)
+  options = options or {}
+  local etat = nouvel_etat("chantiers")
+  etat.livraison, etat.lignes_chantiers, etat.constructeurs = {}, {}, {}
+  if options.illisibles then
+    etat.constructeurs = nil
+    return etat
+  end
+  for i = 1, options.nombre or 1 do
+    etat.constructeurs[i] = {
+      cle = i .. ",64,0", pos = { x = i, y = 64, z = 0 }, nom = "Constructeur " .. i, niveau = i,
+      ressources = options.sans_ressources and {} or {
+        { item = "minecraft:stone", libelle = "Pierre", besoin = 10, disponible = 10, en_livraison = 0, manque = 0 },
+        { item = "minecraft:dirt", libelle = "Terre", besoin = 64, disponible = 8, en_livraison = 0, manque = 56 },
+      },
+      erreur = options.erreur,
+    }
+    if options.erreur then etat.constructeurs[i].ressources = {} end
+  end
+  return etat
+end
+
 return {
-  aucun_ecrit_hors_de_la_cible_sur_un_moniteur_minuscule_pour_les_quatre_pages = function()
+  aucun_ecrit_hors_de_la_cible_sur_un_moniteur_minuscule_pour_toutes_les_pages = function()
     for _, taille in ipairs({ { 1, 1 }, { 2, 2 }, { 3, 5 }, { 6, 3 }, { 10, 4 }, { 14, 6 } }) do
       for _, page in ipairs(PAGES) do
         local m = dessiner(taille[1], taille[2], etat_charge(page))
@@ -156,7 +184,7 @@ return {
     local etat = nouvel_etat()
     etat.erreurs = { "Pont ME introuvable" }
     local m = dessiner(50, 12, etat)
-    verif.vrai(m.ligne(2):find("Habitants", 1, true), "onglets intacts")
+    verif.vrai(m.ligne(2):find("Travaux", 1, true), "onglets intacts")
     verif.vrai(ordonnee(m, "Pont ME introuvable") > 2)
     verif.egal(couleur_de(m, "Pont ME"), colors.orange)
   end,
@@ -269,23 +297,141 @@ return {
 
   l_onglet_touche_donne_la_page = function()
     local m = moniteur.nouveau(80, 24)
-    verif.egal(vues.page_touchee(m, 3, 2), "resume")
-    verif.egal(vues.page_touchee(m, 15, 2), "requetes")
-    verif.egal(vues.page_touchee(m, 25, 2), "travaux")
-    verif.egal(vues.page_touchee(m, 35, 2), "habitants")
+    verif.egal(page_touchee(m, nouvel_etat(), 3, 2), "resume")
+    verif.egal(page_touchee(m, nouvel_etat(), 15, 2), "requetes")
+    verif.egal(page_touchee(m, nouvel_etat(), 25, 2), "travaux")
+    verif.egal(page_touchee(m, nouvel_etat(), 35, 2), "chantiers")
+    verif.egal(page_touchee(m, nouvel_etat(), 45, 2), "habitants")
   end,
 
   hors_des_onglets_aucune_page_n_est_touchee = function()
     local m = moniteur.nouveau(80, 24)
-    verif.egal(vues.page_touchee(m, 9, 2), nil)
-    verif.egal(vues.page_touchee(m, 60, 2), nil)
-    verif.egal(vues.page_touchee(m, 3, 1), nil)
-    verif.egal(vues.page_touchee(m, 3, 10), nil)
+    for _, point in ipairs({ { 9, 2 }, { 60, 2 }, { 3, 1 }, { 3, 10 } }) do
+      verif.egal(vues.action_touchee(m, nouvel_etat(), point[1], point[2]), nil)
+    end
   end,
 
   la_zone_touchee_correspond_aux_onglets_dessines_sur_petit_moniteur = function()
     local m = dessiner(26, 12, nouvel_etat())
-    verif.egal(vues.page_touchee(m, 1, 2), "resume")
-    verif.egal(vues.page_touchee(m, 26, 2), "habitants")
+    verif.egal(page_touchee(m, nouvel_etat(), 1, 2), "resume")
+    verif.egal(page_touchee(m, nouvel_etat(), 26, 2), "habitants")
+  end,
+
+  aucun_ecrit_hors_de_la_cible_sur_la_page_chantiers_dans_tous_les_cas = function()
+    local cas = {
+      etat_chantiers(),
+      etat_chantiers({ nombre = 0 }),
+      etat_chantiers({ sans_ressources = true }),
+      etat_chantiers({ erreur = "Ressources illisibles : chunk déchargé" }),
+      etat_chantiers({ nombre = 40 }),
+      etat_chantiers({ illisibles = true }),
+    }
+    for _, taille in ipairs({ { 1, 1 }, { 6, 3 }, { 14, 6 }, { 26, 12 }, { 50, 19 }, { 164, 81 } }) do
+      for i, etat in ipairs(cas) do
+        etat.colonie.raid = true
+        local m = dessiner(taille[1], taille[2], etat)
+        verif.egal(m.debordements, 0, "cas " .. i .. " sur " .. taille[1] .. "x" .. taille[2])
+      end
+    end
+  end,
+
+  chantiers_montrent_un_sous_onglet_par_constructeur_et_le_bouton_du_constructeur_actif = function()
+    local etat = etat_chantiers({ nombre = 2 })
+    etat.constructeur = "2,64,0"
+    local m = dessiner(60, 16, etat)
+    local _, y_principal = m.chercher("Chantiers")
+    local _, y_lea = m.chercher(" Constructeur 1 ")
+    verif.egal({ y_principal, y_lea }, { 2, 3 })
+    local x, y = m.chercher(" Constructeur 2 ")
+    verif.egal(m.couleur_fond(x, y), colors.white, "le sous-onglet actif est en clair")
+    verif.vrai(m.chercher("Constructeur 2 (niveau 2)"), "le titre nomme le constructeur montré")
+    local bx, by = m.chercher("Livraison auto : NON")
+    verif.egal({ by, m.couleur_fond(bx, by) }, { 4, colors.red })
+  end,
+
+  bouton_de_livraison_active_dit_oui_en_vert_et_la_colonne_statut_apparait = function()
+    local etat = etat_chantiers()
+    etat.livraison["1,64,0"] = true
+    etat.lignes_chantiers = { ["1,64,0"] = { ["minecraft:dirt"] = ligne_passe("Lea", "partiel", 8) } }
+    local m = dessiner(60, 16, etat)
+    local x, y = m.chercher("Livraison auto : OUI")
+    verif.egal(m.couleur_fond(x, y), colors.lime)
+    verif.vrai(m.chercher("Statut"))
+    verif.egal(couleur_de(m, "partiel"), colors.yellow, "même couleur que l'onglet Requêtes")
+  end,
+
+  constructeur_desactive_montre_ses_ressources_et_manques_sans_statut = function()
+    local m = dessiner(60, 16, etat_chantiers())
+    verif.vrai(m.chercher("Terre"))
+    verif.vrai(m.chercher("Manque"))
+    verif.egal(m.chercher("Statut"), nil)
+  end,
+
+  ressources_en_manque_passent_en_premier = function()
+    local m = dessiner(60, 16, etat_chantiers())
+    verif.vrai(ordonnee(m, "Terre") < ordonnee(m, "Pierre"), "Terre manque, Pierre est complète")
+  end,
+
+  chantiers_sans_constructeur_sans_ressource_ou_illisibles_le_disent = function()
+    verif.vrai(dessiner(60, 16, etat_chantiers({ nombre = 0 })).chercher("Aucun constructeur"))
+    verif.vrai(dessiner(60, 16, etat_chantiers({ sans_ressources = true })).chercher("Aucune ressource"))
+    local m = dessiner(60, 16, etat_chantiers({ erreur = "Ressources illisibles : chunk déchargé" }))
+    verif.egal(couleur_de(m, "Ressources illisibles"), colors.orange)
+    verif.vrai(m.chercher("Livraison auto"), "le bouton reste là")
+    verif.vrai(dessiner(60, 16, etat_chantiers({ illisibles = true })).chercher("Constructeurs illisibles"))
+  end,
+
+  sur_moniteur_etroit_le_bouton_passe_sous_le_nom = function()
+    local m = dessiner(26, 12, etat_chantiers())
+    local _, y_nom = m.chercher("Constructeur 1")
+    local _, y_bouton = m.chercher("Livraison auto")
+    verif.vrai(y_bouton and y_bouton > 4, m.texte())
+    verif.vrai(y_nom < y_bouton)
+  end,
+
+  trop_de_constructeurs_ajoutent_un_sous_onglet_suivant_et_montrent_l_actif = function()
+    local etat = etat_chantiers({ nombre = 40 })
+    etat.constructeur = "30,64,0"
+    local m = dessiner(60, 16, etat)
+    verif.egal(m.ligne(3):sub(1, 3), " > ")
+    verif.vrai(m.chercher("Constructeur 30 (niveau 30)"))
+    local actif
+    for x = 1, 60 do
+      if m.couleur_fond(x, 3) == colors.white then actif = actif or x end
+    end
+    verif.vrai(actif, "le sous-onglet actif est dessiné en clair\n" .. m.texte())
+    verif.egal(vues.action_touchee(m, etat, actif, 3), { type = "constructeur", cle = "30,64,0" })
+    verif.egal(vues.action_touchee(m, etat, 2, 3), { type = "constructeur", cle = "31,64,0" })
+  end,
+
+  toucher_un_sous_onglet_choisit_le_constructeur = function()
+    local etat = etat_chantiers({ nombre = 2 })
+    local m = dessiner(60, 16, etat)
+    local x, y = m.chercher(" Constructeur 2 ")
+    verif.egal(vues.action_touchee(m, etat, x + 1, y), { type = "constructeur", cle = "2,64,0" })
+  end,
+
+  toucher_le_bouton_bascule_la_livraison_du_constructeur_montre = function()
+    for _, largeur in ipairs({ 26, 60 }) do
+      local etat = etat_chantiers({ nombre = 2 })
+      etat.constructeur = "2,64,0"
+      local m = dessiner(largeur, 16, etat)
+      local x, y = m.chercher("Livraison auto")
+      verif.egal(vues.action_touchee(m, etat, x, y), { type = "livraison", cle = "2,64,0" }, "largeur " .. largeur)
+    end
+  end,
+
+  hors_page_chantiers_le_bouton_n_est_pas_touchable = function()
+    local etat = etat_chantiers()
+    local m = dessiner(60, 16, etat)
+    local x, y = m.chercher("Livraison auto")
+    etat.page = "resume"
+    verif.egal(vues.action_touchee(m, etat, x, y), nil)
+  end,
+
+  constructeur_actif_disparu_retombe_sur_le_premier = function()
+    local etat = etat_chantiers({ nombre = 2 })
+    etat.constructeur = "99,64,0"
+    verif.vrai(dessiner(60, 16, etat).chercher("Constructeur 1 (niveau 1)"))
   end,
 }

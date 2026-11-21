@@ -1,4 +1,4 @@
--- Lecture de la colonie par le Colony Integrator : instantané pour l'affichage et requêtes normalisées.
+-- Lecture de la colonie par le Colony Integrator : instantané, requêtes normalisées et huttes de constructeur.
 
 local peripheriques = require("commun.peripheriques")
 local requetes = require("colonie.requetes")
@@ -126,6 +126,75 @@ function lecture.requetes(integrateur)
   local lu, brutes = peripheriques.appel(integrateur, "getRequests")
   if not lu or type(brutes) ~= "table" then return nil, message_requetes_illisibles(brutes) end
   return requetes.normaliser(brutes, lire(integrateur, "getBuildings", {}))
+end
+
+-- Type de schéma (`getBuildings()[i].type`) d'une hutte de constructeur.
+local TYPE_CONSTRUCTEUR = "builder"
+
+local function nombre(valeur)
+  return math.max(0, tonumber(valeur) or 0)
+end
+
+local function ressource(brute)
+  local item = type(brute.item) == "table" and brute.item or {}
+  if type(item.name) ~= "string" then return nil end
+  local besoin, disponible, en_livraison = nombre(brute.needs), nombre(brute.available), nombre(brute.delivering)
+  return {
+    item = item.name,
+    libelle = brute.displayName or item.displayName or item.name,
+    besoin = besoin,
+    disponible = disponible,
+    en_livraison = en_livraison,
+    manque = math.max(0, besoin - disponible - en_livraison),
+  }
+end
+
+local function lire_ressources(integrateur, pos)
+  local ok, brutes = peripheriques.appel(integrateur, "getBuilderResources", pos)
+  if not ok then return {}, "Ressources illisibles : " .. tostring(brutes) end
+  if type(brutes) ~= "table" then return {}, "Ressources illisibles : hutte introuvable à cette position" end
+  local liste = {}
+  for _, brute in ipairs(brutes) do
+    local lue = type(brute) == "table" and ressource(brute) or nil
+    if lue then liste[#liste + 1] = lue end
+  end
+  return liste
+end
+
+local function nom_affecte(batiment)
+  for _, citoyen in ipairs(type(batiment.citizens) == "table" and batiment.citizens or {}) do
+    if type(citoyen) == "table" and type(citoyen.name) == "string" and citoyen.name ~= "" then return citoyen.name end
+  end
+  return nil
+end
+
+--- Renvoie les huttes de constructeur triées par clé de position, ou `nil, message`. Chacune :
+-- `{ cle, pos, nom, niveau, ressources = { { item, libelle, besoin, disponible, en_livraison, manque } }, erreur }`.
+-- Une hutte aux ressources illisibles garde une liste vide et `erreur` ; les autres sont lues quand même.
+function lecture.constructeurs(integrateur)
+  local ok, message = verifier_colonie(integrateur)
+  if not ok then return nil, message end
+  local lu, batiments = peripheriques.appel(integrateur, "getBuildings")
+  if not lu or type(batiments) ~= "table" then return nil, "Bâtiments illisibles : " .. tostring(batiments) end
+  local liste = {}
+  for _, batiment in ipairs(batiments) do
+    local cle = type(batiment) == "table" and batiment.type == TYPE_CONSTRUCTEUR and requetes.cle_position(batiment.pos)
+    if cle and cle ~= "" then liste[#liste + 1] = { cle = cle, batiment = batiment } end
+  end
+  table.sort(liste, function(a, b) return a.cle < b.cle end)
+  for numero, entree in ipairs(liste) do
+    local batiment = entree.batiment
+    local ressources, erreur = lire_ressources(integrateur, batiment.pos)
+    liste[numero] = {
+      cle = entree.cle,
+      pos = batiment.pos,
+      nom = nom_affecte(batiment) or ("Constructeur " .. numero),
+      niveau = tonumber(batiment.level) or 0,
+      ressources = ressources,
+      erreur = erreur,
+    }
+  end
+  return liste
 end
 
 return lecture

@@ -7,6 +7,7 @@ return {
   fabriquer = true,           -- lancer l'auto-craft AE2 quand le stock ne suffit pas
   ignorer_equipement = true,  -- laisser outils et armures aux colons
   exclusions = {},            -- noms d'items jamais livrés, * remplace n'importe quoi : "minecraft:*_sapling"
+  livraison_chantiers = {},   -- huttes de constructeur livrées automatiquement, ["x,y,z"] = true (se bascule à l'écran)
   cote_alarme = "",           -- côté de l'ordinateur mis sous redstone pendant un raid ("" : aucun)
   echelle_texte = 0.5,        -- taille du texte du moniteur (0.5 à 5)
 }

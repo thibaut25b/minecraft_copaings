@@ -41,14 +41,24 @@ local function ligne(requete, action, statut, livre, message)
   return { requete = requete, action = action, statut = statut, livre = livre, message = message }
 end
 
---- Lignes de passe quand aucun pont ME n'est disponible : chaque requête reste visible, à servir à la main.
-function fourniture.lignes_sans_pont(liste)
+-- Lignes de requêtes laissées hors de la passe, toutes avec le même type d'action, statut et raison.
+local function lignes_hors_passe(liste, type_action, statut, raison)
   local lignes = {}
   for indice, requete in ipairs(liste) do
-    local action = { type = "manquant", item = nil, quantite = 0, raison = "pas de pont ME" }
-    lignes[indice] = ligne(requete, action, "manquant", 0, action.raison)
+    local action = { type = type_action, item = nil, quantite = 0, raison = raison }
+    lignes[indice] = ligne(requete, action, statut, 0, raison)
   end
   return lignes
+end
+
+--- Lignes de passe quand aucun pont ME n'est disponible : chaque requête reste visible, à servir à la main.
+function fourniture.lignes_sans_pont(liste)
+  return lignes_hors_passe(liste, "manquant", "manquant", "pas de pont ME")
+end
+
+--- Lignes « ignoré » des requêtes qu'une autre voie sert déjà (`raison` dit laquelle).
+function fourniture.lignes_ignorees(liste, raison)
+  return lignes_hors_passe(liste, "ignorer", "ignore", raison)
 end
 
 --- Crée l'objet de fourniture lié au pont ME. `passer(requetes_normalisees)` renvoie les lignes de passe.
