@@ -5,9 +5,11 @@
   "scripts": {
     "test": "node tests/lancer.js",
     "verify": "node tests/lancer.js",
-    "apercu": "node outils/apercu.js"
+    "apercu": "node outils/apercu.js",
+    "jouer": "node outils/jouer.js"
   },
   "devDependencies": {
-    "fengari": "^0.1.5"
+    "fengari": "^0.1.5",
+    "fengari-web": "^0.1.4"
   }
 }

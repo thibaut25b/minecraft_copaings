@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>__TITRE__</title>
+<style>
+  body { margin: 0; padding: 16px 24px; background: #14161a; color: #c8ccd2; font: 14px/1.4 system-ui, sans-serif; }
+  h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
+  .commandes { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 8px; }
+  input[type=number] { width: 4em; }
+  canvas { display: block; border: 1px solid #2a2e35; image-rendering: pixelated; }
+  #moniteur { cursor: pointer; }
+  h2 { margin: 16px 0 6px; font-size: 14px; font-weight: 500; color: #7d848f; }
+  #etat { color: #7d848f; }
+  .alerte { margin: 8px 0; padding: 8px 12px; background: #3a2323; border-left: 3px solid #cc4c4c; white-space: pre-wrap; font-family: monospace; }
+</style>
+</head>
+<body>
+<h1>__TITRE__</h1>
+<div class="commandes">
+  <label>Taille <select id="taille">
+    <option>51x19</option><option>82x40</option><option selected>100x38</option><option>164x81</option>
+    <option value="libre">libre</option>
+  </select></label>
+  <span id="libre" hidden><input id="largeur" type="number" min="1" max="400"> x <input id="hauteur" type="number" min="1" max="200"> <button id="appliquer">Appliquer</button></span>
+  <label>Zoom <select id="zoom"><option value="0">auto</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+  <button id="arreter" title="Émet terminate, comme Ctrl+T">Arrêter</button>
+  <button id="relancer">Relancer</button>
+  <button id="reinitialiser" title="Efface les fichiers écrits par le programme dans ce navigateur">Réinitialiser</button>
+  <span id="peripheriques"></span>
+</div>
+<div id="etat"></div>
+<div id="avertissements"></div>
+<div id="erreurs"></div>
+<canvas id="moniteur"></canvas>
+<h2>Terminal de l'ordinateur (clavier : touches et caractères envoyés au programme)</h2>
+<canvas id="terminal"></canvas>
+<script>__FENGARI__</script>
+<script>
+"use strict";
+const POLICE = __POLICE__;
+const PROJET = __PROJET__;
+__RENDU_CASES__
+__HOTE__
+</script>
+</body>
+</html>
