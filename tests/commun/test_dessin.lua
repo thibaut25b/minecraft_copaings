@@ -83,8 +83,38 @@ return {
   end,
 
   tronquer_compte_un_accent_pour_un_caractere = function()
-    verif.egal(dessin.tronquer("éééé", 4), "\233\233\233\233")
-    verif.egal(dessin.tronquer("ééééé", 4), "\233\233\233~")
+    verif.egal(dessin.tronquer("éééé", 4), "éééé")
+    verif.egal(dessin.tronquer("ééééé", 4), "ééé~")
+  end,
+
+  -- Non-régression : un texte aligné ou tronqué était converti une seconde fois par `ecrire`, et un accent suivi
+  -- d'un caractère de 128 à 191 (« ° », « « », espace insécable) devenait « ? ».
+  texte_aligne_ou_tronque_puis_ecrit_n_est_converti_qu_une_fois = function()
+    local m = moniteur.nouveau(6, 2)
+    dessin.ecrire(m, 1, 1, dessin.aligner("é°C", 6))
+    dessin.ecrire(m, 1, 2, dessin.tronquer("à « b »", 6))
+    verif.egal(m.ligne(1), "\233\176C   ")
+    verif.egal(m.ligne(2), "\224 \171 b~")
+  end,
+
+  tableau_prend_un_fond_un_zebre_et_des_pastilles = function()
+    local m = moniteur.nouveau(20, 4)
+    dessin.tableau(m, 1, 1, 20, 4, COLONNES, {
+      { "Pierre", "12" }, { "Terre", { texte = "3", couleur = colors.black, fond = colors.red } }, { "Sable", "1" },
+    }, { fond = colors.gray, zebre = colors.blue })
+    verif.egal(m.couleur_fond(1, 1), colors.gray, "titres sur le fond")
+    verif.egal(m.couleur_fond(1, 2), colors.gray)
+    verif.egal(m.couleur_fond(1, 3), colors.blue, "une ligne sur deux en zèbre")
+    verif.egal(m.couleur_fond(20, 3), colors.blue, "le zèbre couvre toute la largeur")
+    local x = m.ligne(3):find("3", 1, true)
+    verif.egal(m.couleur_fond(x, 3), colors.red, "pastille")
+    verif.egal(m.debordements, 0)
+  end,
+
+  colonne_flexible_recoit_son_minimum_avant_le_partage = function()
+    local m = moniteur.nouveau(30, 2)
+    dessin.tableau(m, 1, 1, 30, 2, { { titre = "A", min = 20 }, { titre = "B" } }, { { string.rep("a", 22), "b" } })
+    verif.vrai(m.ligne(2):find(string.rep("a", 22), 1, true), "A a 20 cases plus la moitié du reste")
   end,
 
   aligner_donne_toujours_la_largeur_demandee = function()

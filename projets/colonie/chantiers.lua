@@ -15,6 +15,17 @@ function chantiers.choisir(constructeurs, cle)
   return constructeurs[1].cle
 end
 
+--- Avancement d'un chantier : part du besoin total déjà disponible (0..1), nil sans ressource.
+function chantiers.avancement(constructeur)
+  local besoin, disponible = 0, 0
+  for _, ressource in ipairs(constructeur.ressources) do
+    besoin = besoin + ressource.besoin
+    disponible = disponible + math.min(ressource.disponible, ressource.besoin)
+  end
+  if besoin <= 0 then return nil end
+  return disponible / besoin
+end
+
 -- Identifiant d'une ressource vue comme requête : stable tant que le besoin total ne change pas.
 -- `disponible` et `en_livraison` n'y entrent pas : leur hausse (livraison en cours) garde l'identifiant, donc la
 -- mémoire de fourniture ; un nouveau besoin total (autre chantier, autre étape) donne une nouvelle requête.

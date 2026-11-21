@@ -80,7 +80,7 @@ local function barres(cible, zone, t)
 end
 
 local function tableau(cible, zone)
-  dessin.tableau(panneaux.sur_fond(cible, R.surface), zone.x, zone.y, zone.largeur, zone.hauteur, {
+  dessin.tableau(cible, zone.x, zone.y, zone.largeur, zone.hauteur, {
     { titre = "Objet" },
     { titre = "Stock", largeur = 6, alignement = "droite" },
     { titre = "État", largeur = 11 },
@@ -93,14 +93,14 @@ local function tableau(cible, zone)
     { "Béton", "8 840", { texte = "suffisant", couleur = R.bon } },
     { "Engrenages", "1 480", { texte = "suffisant", couleur = R.bon } },
     { "Tôles de zinc", "64", { texte = "bas", couleur = R.moyen } },
-  })
+  }, { fond = R.surface })
 end
 
 local function onglets(cible, zone, t)
   local liste = { { nom = "resume", libelle = "Résumé" }, { nom = "requetes", libelle = "Requêtes" },
     { nom = "stocks", libelle = "Stocks" } }
   local actif = liste[math.floor(t / 20) % #liste + 1]
-  dessin.onglets(panneaux.sur_fond(cible, R.surface), zone.x, zone.y, zone.largeur, liste, actif.nom)
+  dessin.onglets(cible, zone.x, zone.y, zone.largeur, liste, actif.nom)
   if zone.hauteur >= 3 then
     dessin.ecrire(cible, zone.x, zone.y + 2, dessin.tronquer("Page affichée : " .. actif.libelle, zone.largeur),
       R.discret, R.surface)

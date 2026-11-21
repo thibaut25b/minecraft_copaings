@@ -46,6 +46,7 @@ theme.ROLES = {
   moyen = colors.yellow,
   mauvais = colors.red,
   info = colors.cyan,
+  alerte = colors.orange,
 }
 
 local function poser(cible, palette)

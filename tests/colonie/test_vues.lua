@@ -5,6 +5,7 @@ colors = require("faux.couleurs")
 local verif = require("verif")
 local vues = require("colonie.vues")
 local moniteur = require("faux.moniteur")
+local exemple = require("outils.apercus.colonie.exemple")
 
 local PAGES = { "resume", "requetes", "travaux", "chantiers", "habitants" }
 
@@ -114,8 +115,8 @@ return {
 
   titre_porte_le_nom_a_gauche_et_l_heure_a_droite = function()
     local m = dessiner(40, 12, nouvel_etat())
-    verif.egal(m.ligne(1):sub(1, 8), "Aubepine")
-    verif.egal(m.ligne(1):sub(-5), "12:30")
+    verif.egal(m.ligne(1):sub(3, 10), "Aubepine")
+    verif.egal(m.ligne(1):sub(-6), "12:30 ")
   end,
 
   pied_donne_le_compte_a_rebours_de_la_prochaine_passe = function()
@@ -268,10 +269,13 @@ return {
     local resume = dessiner(60, 16, etat)
     etat.page = "requetes"
     local requetes = dessiner(60, 16, etat)
-    verif.egal(couleur_de(resume, "manquant"), colors.red)
-    verif.egal(couleur_de(requetes, "manquant"), colors.red)
-    verif.egal(couleur_de(resume, "1  livr\233"), colors.lime)
-    verif.egal(couleur_de(requetes, "livr\233"), colors.lime)
+    verif.egal(couleur_de(resume, "1 manquant"), colors.red, "légende du résumé")
+    local _, y = resume.chercher("Planches (Alice)")
+    verif.egal(resume.couleur_fond(1, y), colors.red, "pastille de ce qui attend le joueur, sur le résumé")
+    _, y = requetes.chercher("Alice")
+    verif.egal(requetes.couleur_fond(1, y), colors.red, "même pastille sur la page Requêtes")
+    verif.egal(couleur_de(resume, "1 livr\233"), colors.lime)
+    verif.egal(couleur_de(requetes, "livr\233 "), colors.lime)
   end,
 
   statut_inconnu_ne_plante_pas = function()
@@ -285,14 +289,98 @@ return {
     verif.vrai(m.chercher("Bonheur"))
   end,
 
-  liste_trop_longue_indique_combien_de_lignes_restent = function()
+  liste_trop_longue_se_pagine_et_dit_quelles_lignes_sont_montrees = function()
     local etat = nouvel_etat("requetes")
+    etat.pagination = {}
     for i = 1, 30 do etat.lignes[i] = ligne_passe("Demandeur " .. i, "livre", 16) end
     local m = dessiner(60, 12, etat)
-    -- corps de 9 lignes : titres, 7 lignes, indication
-    verif.vrai(m.chercher("+ 23 autres"))
-    verif.vrai(m.chercher("Demandeur 7"))
-    verif.egal(m.chercher("Demandeur 8"), nil)
+    -- corps de 8 rangées sous la légende : titres, 6 lignes, commande
+    verif.vrai(m.chercher("Demandeur 6 "), m.texte())
+    verif.egal(m.chercher("Demandeur 7 "), nil)
+    verif.vrai(m.chercher("1 / 5"))
+    verif.vrai(m.chercher("1 \224 6 sur 30"))
+  end,
+
+  toucher_suivant_puis_precedent_change_de_page_et_boucle = function()
+    local etat = nouvel_etat("requetes")
+    etat.pagination = {}
+    for i = 1, 30 do etat.lignes[i] = ligne_passe("Demandeur " .. i, "livre", 16) end
+    local m = dessiner(60, 12, etat)
+    local x, y = m.chercher("1 / 5")
+    verif.egal(vues.action_touchee(m, etat, 60, y), { type = "pagination", liste = "requetes", page = 2 })
+    verif.egal(vues.action_touchee(m, etat, 58, y), { type = "pagination", liste = "requetes", page = 2 },
+      "le bouton fait au moins 3 cases")
+    verif.egal(vues.action_touchee(m, etat, x - 2, y), { type = "pagination", liste = "requetes", page = 5 },
+      "avant la première page vient la dernière")
+    etat.pagination.requetes = 2
+    m = dessiner(60, 12, etat)
+    verif.vrai(m.chercher("Demandeur 7 "))
+    verif.vrai(m.chercher("2 / 5"))
+  end,
+
+  page_de_liste_retombe_a_un_quand_la_liste_retrecit = function()
+    local etat = nouvel_etat("requetes")
+    etat.pagination = { requetes = 4 }
+    for i = 1, 3 do etat.lignes[i] = ligne_passe("Demandeur " .. i, "livre", 16) end
+    local m = dessiner(60, 12, etat)
+    verif.vrai(m.chercher("Demandeur 1 "))
+    verif.egal(m.chercher(" / "), nil, "pas de commande quand tout tient")
+    verif.egal(etat.pagination.requetes, 1, "la page retenue retombe à 1")
+  end,
+
+  chaque_liste_a_sa_propre_page = function()
+    local etat = exemple.etat({ page = "habitants", nombre = 3, pagination = { habitants = 2, requetes = 3 } })
+    local m = dessiner(51, 19, etat)
+    verif.vrai(m.chercher("2 / "), m.texte())
+    verif.egal(etat.pagination.requetes, 3, "la page des requêtes n'est pas touchée")
+  end,
+
+  le_gabarit_riche_demande_une_cible_assez_grande = function()
+    verif.egal(vues.gabarit(vues.RICHE.largeur, vues.RICHE.hauteur), "riche")
+    verif.egal(vues.gabarit(vues.RICHE.largeur - 1, 81), "compact")
+    verif.egal(vues.gabarit(164, vues.RICHE.hauteur - 1), "compact")
+    verif.egal(vues.gabarit(39, 19), "compact")
+    local riche = dessiner(100, 38, exemple.etat())
+    verif.vrai(riche.chercher("Requ\234tes par statut"), "panneaux au gabarit riche")
+    verif.vrai(riche.chercher("Bonheur, \233volution"), "courbes d'historique")
+    local compact = dessiner(51, 19, exemple.etat())
+    verif.egal(compact.chercher("Requ\234tes par statut"), nil)
+    verif.vrai(compact.chercher("7.4/10"), "le compact garde les valeurs essentielles")
+  end,
+
+  resume_riche_montre_courbes_ou_un_message_sans_assez_de_mesures = function()
+    local etat = exemple.etat()
+    verif.vrai(dessiner(100, 38, etat).chercher("maintenant"), "abscisse des courbes")
+    etat.historique = { etat.historique[1] }
+    local m = dessiner(100, 38, etat)
+    verif.vrai(m.chercher("Courbe d\232s la"), m.texte())
+    verif.egal(m.chercher("maintenant"), nil)
+  end,
+
+  chaque_page_tient_dans_chaque_taille_dans_chaque_etat_particulier = function()
+    local etats = {
+      {}, { raid = true }, { erreurs = exemple.ERREURS }, { sans_colonie = true }, { sans_requete = true },
+      { sans_chantier = true, constructeur = "88,63,12" }, { nombre = 3, pagination = { habitants = 2, requetes = 2 } },
+    }
+    for _, taille in ipairs({ { 26, 12 }, { 39, 19 }, { 51, 19 }, { 100, 38 }, { 164, 81 } }) do
+      for _, page in ipairs(PAGES) do
+        for i, options in ipairs(etats) do
+          options.page = page
+          local m = dessiner(taille[1], taille[2], exemple.etat(options))
+          verif.egal(m.debordements, 0, string.format("%s, état %d, %dx%d", page, i, taille[1], taille[2]))
+        end
+      end
+    end
+  end,
+
+  au_gabarit_riche_le_bouton_de_livraison_est_haut_et_touchable_partout = function()
+    local etat = exemple.etat({ page = "chantiers", constructeur = "88,63,12" })
+    local m = dessiner(100, 38, etat)
+    local x, y = m.chercher("Livraison auto : NON")
+    verif.egal(m.couleur_fond(x, y), colors.red)
+    for dy = -1, 1 do
+      verif.egal(vues.action_touchee(m, etat, x, y + dy), { type = "livraison", cle = "88,63,12" })
+    end
   end,
 
   l_onglet_touche_donne_la_page = function()

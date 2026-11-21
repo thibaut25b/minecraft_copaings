@@ -190,6 +190,13 @@ return {
       { "ignore", 0, "livrée par l'onglet Chantiers", "ignorer" })
   end,
 
+  avancement_est_la_part_du_besoin_deja_disponible = function()
+    local chantier = constructeur(CLE, { ressource(TERRE, 10, 10, 0), ressource(PIERRE, 30, 5, 20) })
+    verif.egal(chantiers.avancement(chantier), 15 / 40)
+    verif.egal(chantiers.avancement(constructeur(CLE, { ressource(TERRE, 10, 50, 0) })), 1, "le surplus ne compte pas")
+    verif.egal(chantiers.avancement(constructeur(CLE, {})), nil, "sans ressource, pas d'avancement")
+  end,
+
   requetes_ordinaires_et_chantiers_partagent_le_stock_de_la_passe = function()
     local m = monde()
     m.etat_pont.stock[TERRE] = 70

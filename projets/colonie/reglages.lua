@@ -10,4 +10,7 @@ return {
   livraison_chantiers = {},   -- huttes de constructeur livrées automatiquement, ["x,y,z"] = true (se bascule à l'écran)
   cote_alarme = "",           -- côté de l'ordinateur mis sous redstone pendant un raid ("" : aucun)
   echelle_texte = 0.5,        -- taille du texte du moniteur (0.5 à 5)
+  theme = "nuit",             -- palette du tableau de bord : "nuit" ou "ambre"
+  periode_historique = 300,   -- secondes entre deux mesures des courbes (bonheur, population, requêtes)
+  points_historique = 288,    -- mesures gardées dans /colonie.hist (288 x 5 min = 24 h, environ 10 Ko)
 }

@@ -54,8 +54,14 @@ function panneaux.rectangle(cible, x, y, largeur, hauteur, couleur)
   for rangee = y, y + hauteur - 1 do dessin.ecrire(cible, x, rangee, vide, couleur, couleur) end
 end
 
+--- Zone intérieure { x, y, largeur, hauteur } du panneau posé en (x, y, largeur, hauteur) : alignée sur le titre,
+--- une rangée vide sous le titre, marge d'une case en bas.
+function panneaux.interieur(x, y, largeur, hauteur)
+  return { x = x + 2, y = y + 2, largeur = largeur - 4, hauteur = hauteur - 3 }
+end
+
 --- Panneau sur la surface : liseré d'accent, `titre`, `annotation` discrète à droite si elle tient.
---- Renvoie la zone intérieure { x, y, largeur, hauteur }, alignée sur le titre, marge d'une case en bas.
+--- Renvoie sa zone intérieure (voir `panneaux.interieur`).
 function panneaux.panneau(cible, x, y, largeur, hauteur, titre, annotation)
   panneaux.rectangle(cible, x, y, largeur, hauteur, R.surface)
   dessin.ecrire(cible, x, y, MARQUE, R.accent, R.surface)
@@ -68,7 +74,20 @@ function panneaux.panneau(cible, x, y, largeur, hauteur, titre, annotation)
       ecrire(cible, x + largeur - 1 - longueur_note, y, longueur_note, annotation, "gauche", R.discret, R.surface)
     end
   end
-  return { x = x + 2, y = y + 2, largeur = largeur - 4, hauteur = hauteur - 3 }
+  return panneaux.interieur(x, y, largeur, hauteur)
+end
+
+--- Tuile de mesure : panneau `titre`, `valeur` en `couleur` suivie de `note` discrète, barre fine à `ratio` dessous
+--- (sans barre si `ratio` est nil).
+function panneaux.tuile(cible, x, y, largeur, hauteur, titre, valeur, note, ratio, couleur)
+  local zone = panneaux.panneau(cible, x, y, largeur, hauteur, titre)
+  if zone.hauteur < 1 or zone.largeur < 1 then return end
+  local ecrit = dessin.ecrire(cible, zone.x, zone.y, dessin.tronquer(valeur, zone.largeur), couleur, R.surface)
+  if note and zone.largeur - ecrit - 1 >= 4 then
+    dessin.ecrire(cible, zone.x + ecrit + 1, zone.y, dessin.tronquer(note, zone.largeur - ecrit - 1), R.discret,
+      R.surface)
+  end
+  if ratio and zone.hauteur >= 2 then panneaux.barre_fine(cible, zone.x, zone.y + 1, zone.largeur, ratio, couleur) end
 end
 
 --- Bandeau de titre sur la première rangée : `titre`, `sous_titre` discret, puis `segments` { { texte, couleur } }
@@ -125,14 +144,46 @@ function panneaux.paires(cible, zone, paires, fond)
   end
 end
 
---- Cible qui dessine sur `fond` ce qu'une brique prévue pour le fond du thème peindrait en noir (tableau, onglets).
-function panneaux.sur_fond(cible, fond)
-  local relais = setmetatable({}, { __index = cible })
-  local function poser(couleur)
-    cible.setBackgroundColor(couleur == R.fond and fond or couleur)
+--- Longueurs entières des `valeurs` mises bout à bout sur `longueur`, à l'échelle de `total` (la somme des valeurs
+--- au moins) : au plus fort reste, somme exacte, et une valeur non nulle reçoit au moins 1 tant qu'il en reste.
+function panneaux.decouper(longueur, valeurs, total)
+  local somme = 0
+  for _, valeur in ipairs(valeurs) do somme = somme + math.max(0, valeur) end
+  total = math.max(total or somme, somme)
+  local pleines = total > 0 and math.floor(longueur * somme / total + 0.5) or 0
+  local tailles, restes, utilisees = {}, {}, 0
+  for i, valeur in ipairs(valeurs) do
+    local exacte = total > 0 and longueur * math.max(0, valeur) / total or 0
+    tailles[i] = math.floor(exacte)
+    restes[i] = exacte > 0 and tailles[i] == 0 and 2 or exacte - tailles[i]
+    utilisees = utilisees + tailles[i]
   end
-  relais.setBackgroundColor, relais.setBackgroundColour = poser, poser
-  return relais
+  while utilisees < pleines do
+    local meilleure
+    for i = 1, #valeurs do
+      if restes[i] > 0 and (not meilleure or restes[i] > restes[meilleure]) then meilleure = i end
+    end
+    if not meilleure then break end
+    tailles[meilleure], restes[meilleure], utilisees = tailles[meilleure] + 1, 0, utilisees + 1
+  end
+  return tailles
+end
+
+--- Barre empilée sur `zone` : `parts` { { valeur, couleur } } bout à bout à l'échelle de `total`, en cases entières
+--- (voir `panneaux.decouper`), le reste en `vide` (la bordure par défaut), sur `fond` (la surface par défaut). La
+--- dernière rangée de pixels reste vide : deux barres l'une sous l'autre ne se touchent pas.
+function panneaux.barre_empilee(cible, zone, parts, total, vide, fond)
+  local valeurs = {}
+  for i, part in ipairs(parts) do valeurs[i] = part[1] end
+  local tailles = panneaux.decouper(zone.largeur, valeurs, total)
+  panneaux.toile(cible, zone, fond or R.surface, function(toile, lpx, hpx)
+    toile.rectangle(1, 1, lpx, hpx - 1, vide or R.bordure, true)
+    local x = 1
+    for i, taille in ipairs(tailles) do
+      if taille > 0 then toile.rectangle(x, 1, 2 * taille, hpx - 1, parts[i][2], true) end
+      x = x + 2 * taille
+    end
+  end)
 end
 
 --- Toile de pixels qui couvre `zone` (en cases), remplie de `fond`, passée à `peindre(toile, largeur_px, hauteur_px)`

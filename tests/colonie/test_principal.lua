@@ -7,6 +7,7 @@ local faux_pont = require("faux.pont_me")
 local faux_integrateur = require("faux.integrateur")
 local faux_moniteur = require("faux.moniteur")
 local vues = require("colonie.vues")
+local historique = require("colonie.historique")
 
 local depaqueter = table.unpack or unpack
 
@@ -254,6 +255,59 @@ return {
     lancer(m, 1)
     verif.egal(m.etat_pont.livre, { ["minecraft:dirt"] = 64 })
     verif.vrai(m.moniteur.chercher("objet enchant"))
+  end,
+
+  le_theme_est_pose_pendant_la_marche_et_la_palette_d_origine_revient_a_l_arret = function()
+    local m = monde()
+    local pendant
+    lancer(m, 2, function(tour)
+      if tour == 2 then pendant = { m.moniteur.getPaletteColour(colors.black) } end
+    end)
+    verif.egal(pendant, { 0x0B / 255, 0x10 / 255, 0x20 / 255 }, "fond du thème nuit pendant la marche")
+    verif.egal({ m.moniteur.getPaletteColour(colors.black) }, { 0x11 / 255, 0x11 / 255, 0x11 / 255 })
+    verif.egal({ m.terminal.getPaletteColour(colors.black) }, { 0x11 / 255, 0x11 / 255, 0x11 / 255 })
+  end,
+
+  theme_inconnu_est_signale_et_remplace_par_nuit = function()
+    local m = monde()
+    m.disque.disque["colonie.cfg"] = textutils.serialize({ theme = "pastel" })
+    lancer(m, 2)
+    verif.vrai(m.moniteur.chercher("th\232me inconnu pastel"), m.moniteur.texte())
+  end,
+
+  une_mesure_par_periode_est_ecrite_dans_l_historique = function()
+    local m = monde()
+    m.disque.epoch = 1767300000000
+    lancer(m, 4)
+    local serie = historique.lire(m.disque.disque["colonie.hist"], 10)
+    verif.egal(#serie, 1, "une seule mesure tant que la période n'est pas écoulée")
+    verif.egal(serie[1].population, 2, "colons du faux intégrateur")
+  end,
+
+  historique_corrompu_repart_de_zero_sans_erreur = function()
+    local m = monde()
+    m.disque.disque["colonie.hist"] = "{ pas un historique"
+    lancer(m, 2)
+    verif.egal(m.moniteur.chercher("istorique"), nil, "aucune erreur à l'écran")
+    verif.egal(#historique.lire(m.disque.disque["colonie.hist"], 10), 1, "le fichier est réécrit proprement")
+  end,
+
+  toucher_la_commande_de_pagination_change_la_page_montree = function()
+    local m = monde()
+    m.colonie.requetes = {}
+    for i = 1, 40 do
+      m.colonie.requetes[i] = { id = "r" .. i, displayName = "Planches " .. i, description = "", state = "IN_PROGRESS",
+        count = 1, minCount = 1, items = { { name = "minecraft:oak_planks", count = 1, displayName = "Planches" } },
+        target = { x = 1, y = 64, z = 1 } }
+    end
+    lancer(m, 3, function(tour)
+      if tour == 1 then return { "monitor_touch", "top", colonne_onglet(m.moniteur, "requetes"), 2 } end
+      if tour == 2 then
+        local _, y = m.moniteur.chercher(" / ")
+        return { "monitor_touch", "top", 60, y }
+      end
+    end)
+    verif.vrai(m.moniteur.chercher("2 / "), m.moniteur.texte())
   end,
 
   motif_d_exclusion_invalide_est_signale_a_l_ecran = function()

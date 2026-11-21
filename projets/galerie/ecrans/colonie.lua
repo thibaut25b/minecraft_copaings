@@ -95,7 +95,7 @@ local function dessiner_requetes(cible, zone, t)
 end
 
 local function dessiner_problemes(cible, zone)
-  dessin.tableau(panneaux.sur_fond(cible, R.surface), zone.x, zone.y, zone.largeur, zone.hauteur, COLONNES, PROBLEMES)
+  dessin.tableau(cible, zone.x, zone.y, zone.largeur, zone.hauteur, COLONNES, PROBLEMES, { fond = R.surface })
 end
 
 return {

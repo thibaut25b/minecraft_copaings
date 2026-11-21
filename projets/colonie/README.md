@@ -27,6 +27,14 @@ L'ordinateur lance ensuite la colonie à chaque démarrage. Relancer la commande
 Ils sont dans `/colonie.cfg`, créé au premier lancement et jamais écrasé par une mise à jour.
 La liste et le sens de chaque réglage sont dans `projets/colonie/reglages.lua`.
 
+## Tableau de bord
+
+Sur un moniteur d'au moins 72 x 28 cases, le tableau de bord montre des panneaux et des courbes ; plus petit, une
+version compacte avec les mêmes informations. Le réglage `theme` choisit la palette (`nuit` ou `ambre`).
+Les courbes viennent de `/colonie.hist`, une mesure toutes les `periode_historique` secondes.
+Une liste trop longue se feuillette avec les flèches en bas à droite.
+Pour voir le rendu hors jeu : `npm run apercu -- colonie`, puis ouvre `apercu/colonie.html`.
+
 ## Chantiers
 
 L'onglet « Chantiers » a un sous-onglet par constructeur : ses matériaux, ce qu'il en a et ce qui manque.

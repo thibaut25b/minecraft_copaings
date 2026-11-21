@@ -123,8 +123,8 @@ local function dessiner_departs(cible, zone, t)
     lignes[i] = ligne_du_tableau(depart, t)
     if not avec_via then table.remove(lignes[i], 3) end
   end
-  dessin.tableau(panneaux.sur_fond(cible, R.surface), zone.x, zone.y, zone.largeur, zone.hauteur,
-    avec_via and COLONNES or COLONNES_SANS_VIA, lignes)
+  dessin.tableau(cible, zone.x, zone.y, zone.largeur, zone.hauteur,
+    avec_via and COLONNES or COLONNES_SANS_VIA, lignes, { fond = R.surface })
 end
 
 -- Points d'une ligne en pixels de la toile.

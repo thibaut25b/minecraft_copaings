@@ -52,7 +52,7 @@ return {
     verif.vrai(connus.nuit and connus.ambre)
   end,
 
-  roles_donnent_onze_emplacements_de_couleur_cc_distincts = function()
+  roles_donnent_douze_emplacements_de_couleur_cc_distincts = function()
     local vus, nombre = {}, 0
     for role, couleur in pairs(theme.ROLES) do
       verif.vrai(type(couleur) == "number" and couleur >= 1 and couleur <= 32768, role)
@@ -60,9 +60,9 @@ return {
       vus[couleur] = true
       nombre = nombre + 1
     end
-    verif.egal(nombre, 11)
+    verif.egal(nombre, 12)
     for _, role in ipairs({ "fond", "surface", "bordure", "texte", "discret", "accent", "accent2", "bon", "moyen",
-      "mauvais", "info" }) do
+      "mauvais", "info", "alerte" }) do
       verif.vrai(theme.ROLES[role], role)
     end
   end,
@@ -135,7 +135,7 @@ return {
   accents_et_etats_sont_lisibles_sur_le_fond_et_les_etats_sont_distincts = function()
     for _, nom in ipairs(theme.NOMS) do
       local m = avec(nom)
-      for _, role in ipairs({ "accent", "accent2", "bon", "moyen", "mauvais", "info" }) do
+      for _, role in ipairs({ "accent", "accent2", "bon", "moyen", "mauvais", "info", "alerte" }) do
         verif.vrai(contraste(couleur_du_role(m, role), couleur_du_role(m, "fond")) >= 4.5, nom .. " " .. role)
       end
       local etats = { couleur_du_role(m, "bon"), couleur_du_role(m, "moyen"), couleur_du_role(m, "mauvais") }

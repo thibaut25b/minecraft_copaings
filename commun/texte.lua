@@ -11,4 +11,12 @@ function texte.vers_cc(valeur)
   end))
 end
 
+--- Texte au jeu de caractères de CC vers UTF-8 : réciproque exacte de `vers_cc`, pour reconvertir sans perte.
+function texte.depuis_cc(octets)
+  return (octets:gsub("[\128-\255]", function(octet)
+    local code = octet:byte()
+    return string.char(192 + math.floor(code / 64), 128 + code % 64)
+  end))
+end
+
 return texte

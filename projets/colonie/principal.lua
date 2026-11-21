@@ -5,14 +5,17 @@ package.path = "/?.lua;" .. package.path
 local config = require("commun.config")
 local journal = require("commun.journal")
 local peripheriques = require("commun.peripheriques")
+local theme = require("commun.theme")
 local defauts = require("colonie.reglages")
 local lecture = require("colonie.lecture")
 local fourniture = require("colonie.fourniture")
 local chantiers = require("colonie.chantiers")
+local historique = require("colonie.historique")
 local vues = require("colonie.vues")
 
 local CHEMIN_CONFIG = "/colonie.cfg"
 local CHEMIN_JOURNAL = "/colonie.log"
+local CHEMIN_HISTORIQUE = "/colonie.hist"
 local TAILLE_JOURNAL = 50000
 local EVENEMENT_AFFICHAGE = "colonie_affichage"
 
@@ -20,17 +23,38 @@ local reglages, erreur_config = config.charger(CHEMIN_CONFIG, defauts)
 local trace = journal.ouvrir(CHEMIN_JOURNAL, TAILLE_JOURNAL)
 
 -- Les erreurs sont rangées par origine : une boucle remplace les siennes sans effacer celles des autres.
-local ORIGINES = { "config", "bascule", "colonie", "passe", "alarme", "ecran", "interne" }
+local ORIGINES = { "config", "bascule", "colonie", "passe", "alarme", "ecran", "historique", "interne" }
 local erreurs = { config = erreur_config and { "Config : " .. erreur_config } or {} }
 for _, origine in ipairs(ORIGINES) do erreurs[origine] = erreurs[origine] or {} end
 if type(reglages.livraison_chantiers) ~= "table" then
   erreurs.config[#erreurs.config + 1] = "Config : livraison_chantiers doit être une table, ignorée"
   reglages.livraison_chantiers = {}
 end
+local function theme_connu(nom)
+  for _, connu in ipairs(theme.NOMS) do
+    if connu == nom then return true end
+  end
+  return false
+end
+if not theme_connu(reglages.theme) then
+  erreurs.config[#erreurs.config + 1] = "Config : thème inconnu " .. tostring(reglages.theme) .. ", nuit utilisé"
+  reglages.theme = "nuit"
+end
+
+-- Historique des courbes : relu au démarrage, vide si le fichier manque ou est illisible.
+local function lire_historique()
+  if not fs.exists(CHEMIN_HISTORIQUE) then return {} end
+  local fichier = fs.open(CHEMIN_HISTORIQUE, "r")
+  if not fichier then return {} end
+  local texte = fichier.readAll()
+  fichier.close()
+  return historique.lire(texte, reglages.points_historique)
+end
 
 local etat = {
   heure = "", page = "resume", colonie = nil, lignes = {}, prochaine_passe = 0, erreurs = {},
   constructeurs = nil, constructeur = nil, lignes_chantiers = {}, livraison = reglages.livraison_chantiers,
+  historique = lire_historique(), pagination = {},
 }
 local internes = {} -- nom d'étape -> message de sa dernière erreur inattendue
 local deja_journalisees = {}
@@ -88,6 +112,24 @@ local function lire_colonie()
   etat.colonie = instantane
   erreurs.colonie = instantane and {} or { "Colonie : " .. tostring(message) }
   piloter_alarme()
+end
+
+-- Ajoute une mesure à l'historique quand la période est écoulée, et seulement alors réécrit le fichier.
+local function noter_historique()
+  local mesure = historique.mesure(etat.colonie, etat.lignes)
+  local instant = os.epoch("utc") / 1000
+  if not historique.ajouter(etat.historique, mesure, instant, reglages.periode_historique,
+    reglages.points_historique) then
+    return
+  end
+  local fichier = fs.open(CHEMIN_HISTORIQUE, "w")
+  if not fichier then
+    erreurs.historique = { "Historique non enregistré : écriture impossible dans " .. CHEMIN_HISTORIQUE }
+    return
+  end
+  fichier.write(historique.serialiser(etat.historique))
+  fichier.close()
+  erreurs.historique = {}
 end
 
 local function passer()
@@ -149,7 +191,9 @@ local function afficher()
   etat.prochaine_passe = math.max(0, math.ceil(echeance_passe - os.clock()))
   etat.erreurs = rassembler_erreurs()
   journaliser_erreurs()
-  local ok, message = pcall(vues.dessiner, (cible_affichage()), etat)
+  local cible = cible_affichage()
+  theme.appliquer(cible, reglages.theme)
+  local ok, message = pcall(vues.dessiner, cible, etat)
   if not ok then trace.erreur("Affichage : " .. tostring(message)) end
 end
 
@@ -165,6 +209,7 @@ end
 local function boucle_colonie()
   while true do
     proteger("colonie", lire_colonie)
+    proteger("historique", noter_historique)
     os.queueEvent(EVENEMENT_AFFICHAGE)
     sleep(reglages.periode_affichage)
   end
@@ -194,6 +239,7 @@ local function reagir(evenement, x, y)
     if action and action.type == "page" then etat.page = action.page end
     if action and action.type == "constructeur" then etat.constructeur = action.cle end
     if action and action.type == "livraison" then basculer_livraison(action.cle) end
+    if action and action.type == "pagination" then etat.pagination[action.liste] = action.page end
     afficher()
   elseif REDESSINER[evenement] then
     afficher()
@@ -208,5 +254,14 @@ local function boucle_affichage()
   end
 end
 
+-- À l'arrêt (Ctrl+T compris), le terminal et le moniteur retrouvent la palette d'origine de CC.
+local function restaurer_palettes()
+  theme.restaurer(term.current())
+  local moniteur = peripheriques.trouver(peripheriques.TYPES.moniteur)
+  if moniteur then pcall(theme.restaurer, moniteur) end
+end
+
 trace.info("Démarrage de la colonie")
-parallel.waitForAny(boucle_fourniture, boucle_colonie, boucle_affichage)
+local ok, message = pcall(parallel.waitForAny, boucle_fourniture, boucle_colonie, boucle_affichage)
+restaurer_palettes()
+if not ok then error(message, 0) end

@@ -1,6 +1,6 @@
-// Aperçu hors jeu de la galerie : joue chaque écran de projets/galerie dans Fengari sur un moniteur enregistreur,
-// puis écrit apercu/galerie.html (animé) et apercu/<nom>.png (première image, échelle 2).
-// Usage : `npm run apercu` ; la variable CC_JAR remplace le chemin du jar de CC: Tweaked (police du jeu).
+// Aperçu hors jeu : joue chaque écran d'une collection (galerie, colonie) dans Fengari sur un moniteur enregistreur,
+// puis écrit apercu/<collection>.html et un PNG par écran (première image, échelle 2).
+// Usage : `npm run apercu` (toutes), `npm run apercu -- colonie` (une seule) ; CC_JAR remplace le jar de CC: Tweaked.
 'use strict';
 
 const fs = require('fs');
@@ -10,9 +10,13 @@ const { lua, lauxlib, lualib, to_luastring, to_jsstring } = require('fengari');
 
 const RACINE = path.resolve(__dirname, '..');
 const DOSSIER_SORTIE = path.join(RACINE, 'apercu');
-const LARGEUR_DEFAUT = 100;
-const HAUTEUR_DEFAUT = 38;
 const ECHELLE_PNG = 2;
+
+// Collections : `liste` renvoie des noms d'écrans de `dossier` ou des écrans tout faits ; PNG dans apercu/`png`/.
+const COLLECTIONS = [
+  { nom: 'galerie', titre: 'Galerie ComputerCraft', liste: 'projets/galerie/ecrans.lua', dossier: 'projets/galerie/ecrans/', png: '' },
+  { nom: 'colonie', titre: 'Tableau de bord de la colonie', liste: 'outils/apercus/colonie/ecrans.lua', dossier: '', png: 'colonie' },
+];
 
 // Géométrie de la police de CC : cases de 6x9 pixels, une case de l'atlas fait 8x11 (marge de 1 pixel), 16 colonnes.
 const LARGEUR_CASE = 6;
@@ -215,6 +219,7 @@ function masquePseudoPixel(code) {
 // ------------------------------------------------------------------------------------------- Écrans via Lua
 
 const PILOTE_LUA = String.raw`
+local LISTE, DOSSIER = ...
 package.path = "./?.lua;./projets/?.lua"
 local moniteur = require("outils.moniteur_enregistreur")
 
@@ -241,8 +246,11 @@ local function ligne(...)
 end
 
 local sortie = {}
-for _, nom in ipairs(dofile("projets/galerie/ecrans.lua")) do
-  local ok, ecran = pcall(dofile, "projets/galerie/ecrans/" .. nom .. ".lua")
+local ok_liste, liste = pcall(dofile, LISTE)
+if not ok_liste then return table.concat({ ligne("ECRAN", LISTE, LISTE, 0, 0), ligne("ERREUR", "liste", liste) }, "\n") end
+for _, entree in ipairs(liste) do
+  local nom, ok, ecran = entree, true, entree
+  if type(entree) == "table" then nom = tostring(entree.nom) else ok, ecran = pcall(dofile, DOSSIER .. nom .. ".lua") end
   if not ok or type(ecran) ~= "table" or type(ecran.dessiner) ~= "function" or type(ecran.images) ~= "number" then
     sortie[#sortie + 1] = ligne("ECRAN", nom, nom, 0, 0)
     sortie[#sortie + 1] = ligne("ERREUR", "chargement", ok and "l'écran doit renvoyer { images, dessiner }" or ecran)
@@ -264,12 +272,13 @@ end
 return table.concat(sortie, "\n")
 `;
 
-function executerEcrans() {
+function executerEcrans(collection) {
   const L = lauxlib.luaL_newstate();
   lualib.luaL_openlibs(L);
-  if (lauxlib.luaL_loadstring(L, to_luastring(PILOTE_LUA)) !== lua.LUA_OK || lua.lua_pcall(L, 0, 1, 0) !== lua.LUA_OK) {
-    throw new Error(to_jsstring(lua.lua_tostring(L, -1)));
-  }
+  if (lauxlib.luaL_loadstring(L, to_luastring(PILOTE_LUA)) !== lua.LUA_OK) throw new Error(to_jsstring(lua.lua_tostring(L, -1)));
+  lua.lua_pushstring(L, to_luastring(collection.liste));
+  lua.lua_pushstring(L, to_luastring(collection.dossier));
+  if (lua.lua_pcall(L, 2, 1, 0) !== lua.LUA_OK) throw new Error(to_jsstring(lua.lua_tostring(L, -1)));
   const defaire = (texte) => texte.replace(/\\([\\nt])/g, (_, c) => ({ '\\': '\\', n: '\n', t: '\t' })[c]);
   const ecrans = [];
   for (const brute of to_jsstring(lua.lua_tostring(L, -1)).split('\n')) {
@@ -326,7 +335,7 @@ const PAGE_HTML = String.raw`<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<title>Galerie ComputerCraft</title>
+<title>__TITRE__</title>
 <style>
   body { margin: 0; padding: 24px 32px; background: #14161a; color: #c8ccd2; font: 14px/1.4 system-ui, sans-serif; }
   h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
@@ -338,7 +347,7 @@ const PAGE_HTML = String.raw`<!doctype html>
 </style>
 </head>
 <body>
-<h1>Galerie ComputerCraft</h1>
+<h1>__TITRE__</h1>
 <span>Une image toutes les 100 ms, clic sur un écran : pause.</span>
 <label>Échelle <select id="echelle"></select></label>
 <div id="avertissements"></div>
@@ -476,34 +485,40 @@ if (POLICE) {
 </html>
 `;
 
-function ecrireHtml(ecrans, police) {
+function ecrireHtml(collection, ecrans, police) {
   const donnees = JSON.stringify(ecrans).replace(/</g, '\\u003c');
   const uri = police ? `data:image/png;base64,${police.png.toString('base64')}` : null;
-  const page = PAGE_HTML.replace('__DONNEES__', () => donnees).replace('__POLICE__', () => JSON.stringify(uri));
-  fs.writeFileSync(path.join(DOSSIER_SORTIE, 'galerie.html'), page);
+  const page = PAGE_HTML.replace(/__TITRE__/g, () => collection.titre).replace('__DONNEES__', () => donnees)
+    .replace('__POLICE__', () => JSON.stringify(uri));
+  fs.writeFileSync(path.join(DOSSIER_SORTIE, `${collection.nom}.html`), page);
 }
 
 // ------------------------------------------------------------------------------------------------- Principal
 
 function main() {
   process.chdir(RACINE);
-  fs.mkdirSync(DOSSIER_SORTIE, { recursive: true });
+  const demandees = process.argv.slice(2);
+  const choisies = COLLECTIONS.filter((c) => demandees.length === 0 || demandees.includes(c.nom));
+  if (choisies.length === 0) throw new Error(`Collection inconnue : ${demandees.join(', ')}`);
   const police = chargerPolice();
   const masques = tableDesMasques(police);
-  const ecrans = executerEcrans();
   let echecs = 0;
-  for (const ecran of ecrans) {
-    for (const erreur of ecran.erreurs) {
-      echecs += 1;
-      console.error(`ERREUR écran « ${ecran.nom} », image ${erreur.image} : ${erreur.message}`);
+  for (const collection of choisies) {
+    const dossierPng = path.join(DOSSIER_SORTIE, collection.png);
+    fs.mkdirSync(dossierPng, { recursive: true });
+    const ecrans = executerEcrans(collection);
+    for (const ecran of ecrans) {
+      for (const erreur of ecran.erreurs) {
+        echecs += 1;
+        console.error(`ERREUR écran « ${ecran.nom} », image ${erreur.image} : ${erreur.message}`);
+      }
+      if (ecran.images.length) {
+        fs.writeFileSync(path.join(dossierPng, `${ecran.nom}.png`), rendreImage(ecran, ecran.images[0], ECHELLE_PNG, masques));
+      }
     }
-    if (ecran.images.length) {
-      fs.writeFileSync(path.join(DOSSIER_SORTIE, `${ecran.nom}.png`), rendreImage(ecran, ecran.images[0], ECHELLE_PNG, masques));
-    }
-    console.log(`${ecran.nom} : ${ecran.images.length} images, ${ecran.largeur}x${ecran.hauteur} cases`);
+    ecrireHtml(collection, ecrans, police);
+    console.log(`apercu/${collection.nom}.html écrit (${ecrans.length} écrans)`);
   }
-  ecrireHtml(ecrans, police);
-  console.log(`apercu/galerie.html écrit (${ecrans.length} écrans)`);
   process.exit(echecs === 0 ? 0 : 1);
 }
 
