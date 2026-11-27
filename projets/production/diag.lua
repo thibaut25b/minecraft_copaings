@@ -1,7 +1,8 @@
--- Diagnostic à lancer à la main (/production/diag [texte]) : état du pont, coffre modèle, objets configurés, recherche d'identifiants.
+-- Diagnostic à la main (/production/diag [tout | texte]) : pont, coffre modèle, clés suivies, chrono, recherche.
 
 package.path = "/?.lua;" .. package.path
 local peripheriques = require("commun.peripheriques")
+local inventaire = require("production.inventaire")
 local lecture = require("production.lecture")
 local suivi = require("production.suivi")
 local vers_cc = require("commun.texte").vers_cc
@@ -10,7 +11,7 @@ local FICHIER = "/production-diag.txt"
 local CONFIG = "/production.cfg"
 local MAX_AFFICHES = 30
 
-local lignes, rapport = {}, { visibles = peripheriques.visibles(), objets = {}, trouves = {}, coffre = {} }
+local lignes, rapport = {}, { visibles = peripheriques.visibles(), suivis = {}, trouves = {}, coffre = {} }
 local recherche = ({ ... })[1]
 
 local function noter(texte) lignes[#lignes + 1] = texte end
@@ -51,8 +52,10 @@ end
 
 local configures = {}
 for _, entree in ipairs(type(lus.objets) == "table" and lus.objets or {}) do
-  if type(entree) == "table" and type(entree.objet) == "string" then
-    configures[#configures + 1] = { objet = entree.objet, nom = type(entree.nom) == "string" and entree.nom or "" }
+  if type(entree) == "table" and type(entree.objet) == "string" and entree.objet ~= ""
+    and (entree.nbt == nil or type(entree.nbt) == "string") then
+    configures[#configures + 1] = { objet = entree.objet, nom = type(entree.nom) == "string" and entree.nom or "",
+      nbt = entree.nbt }
   end
 end
 
@@ -68,37 +71,56 @@ else
   else
     noter("Coffre modèle " .. lus.coffre .. " :")
     local modeles = suivi.fusionner({}, contenu)
-    for _, entree in ipairs(modeles) do noter("  " .. entree.objet) end
+    for _, entree in ipairs(modeles) do noter("  " .. entree.cle) end
     if #modeles == 0 then noter("  vide") end
   end
 end
 
-local objets = suivi.fusionner(configures, contenu)
-local quantites, noms, erreurs = lecture.lire(pont, objets)
-for _, entree in ipairs(objets) do
-  local quantite = quantites[entree.objet]
-  rapport.objets[entree.objet] = { quantite = quantite, nom = noms[entree.objet] }
-  noter(entree.objet .. " = " .. tostring(quantite == nil and "illisible" or quantite)
-    .. (noms[entree.objet] and " (" .. noms[entree.objet] .. ")" or ""))
+local suivis = suivi.fusionner(configures, contenu)
+noter(#suivis .. " objet(s) suivi(s) (config puis coffre) :")
+for _, entree in ipairs(suivis) do
+  local cle = entree.cle or (entree.objet .. " (toutes variantes)")
+  rapport.suivis[#rapport.suivis + 1] = cle
+  noter("  " .. cle)
 end
-for _, message in ipairs(erreurs) do noter("Erreur : " .. message) end
 
-if recherche and pont then
+-- Tous les items du réseau, ou nil après avoir noté le message d'échec.
+local function lire_tout()
+  local items, message = lecture.lire_tout(pont)
+  if not items then noter("getItems : " .. tostring(message)) end
+  return items
+end
+
+if recherche == "tout" then
+  local memoire_avant = collectgarbage("count")
+  local debut = os.epoch("utc")
+  local items = lire_tout()
+  local duree = os.epoch("utc") - debut
+  if items then
+    local instantane = inventaire.normaliser(items)
+    local types = 0
+    for _ in pairs(instantane) do types = types + 1 end
+    local memoire_apres = collectgarbage("count")
+    rapport.chrono = { duree_ms = duree, items = #items, types = types, memoire_avant_ko = memoire_avant,
+      memoire_apres_ko = memoire_apres }
+    noter(string.format("getItems() : %d ms, %d entrées, %d types", duree, #items, types))
+    noter(string.format("Mémoire : %d Ko avant, %d Ko après", math.floor(memoire_avant), math.floor(memoire_apres)))
+  end
+elseif recherche then
   local motif = recherche:lower()
-  local items = lire(pont, "getItems")
-  if type(items) ~= "table" then
-    noter("getItems : " .. tostring(items))
-  else
-    for _, item in ipairs(items) do
-      local id, nom = tostring(item.name), tostring(item.displayName)
-      if id:lower():find(motif, 1, true) or nom:lower():find(motif, 1, true) then
-        rapport.trouves[#rapport.trouves + 1] = { id = id, nom = nom, quantite = item.count }
-      end
+  local items = lire_tout()
+  for _, item in ipairs(items or {}) do
+    local id, nom = tostring(item.name), tostring(item.displayName)
+    if id:lower():find(motif, 1, true) or nom:lower():find(motif, 1, true) then
+      rapport.trouves[#rapport.trouves + 1] = { id = id, nbt = item.nbt, nom = nom, quantite = item.count }
     end
-    noter(#rapport.trouves .. " item(s) contenant « " .. recherche .. " »")
+  end
+  if items then
+    noter(#rapport.trouves .. " item(s) contenant « " .. recherche .. " » (id | nbt | nom | quantité)")
     for i = 1, math.min(MAX_AFFICHES, #rapport.trouves) do
       local trouve = rapport.trouves[i]
-      noter("  " .. trouve.id .. " | " .. trouve.nom .. " | " .. tostring(trouve.quantite))
+      noter("  " .. trouve.id .. " | " .. tostring(trouve.nbt or "-") .. " | " .. trouve.nom .. " | "
+        .. tostring(trouve.quantite))
     end
     if #rapport.trouves > MAX_AFFICHES then
       noter("  ... " .. #rapport.trouves - MAX_AFFICHES .. " de plus dans " .. FICHIER)

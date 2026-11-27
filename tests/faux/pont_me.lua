@@ -8,12 +8,13 @@ local pont_me = {}
 -- `exceptions` (méthode -> message levé, ou fonction des arguments qui renvoie le message ou nil),
 -- `taches` (tâches lancées, champ `etat` : "calcul", "en_cours", "fini", "annule", "erreur", "echec_calcul" ;
 -- champ `debug` : texte de `getDebugMessage`),
--- `noms` (nom -> displayName, défaut : le nom lui-même),
+-- `noms` (nom -> displayName, défaut : le nom lui-même), `variantes` (nom -> liste de { nbt, count, displayName? } :
+-- variantes à composants, en plus de la variante sans composants tenue par `stock`),
 -- `objets_illisibles` (craftItem renvoie un objet tâche sans méthodes). Il lit `appels` et `livre` (nom -> quantité).
 function pont_me.creer()
   local etat = {
     stock = {}, fabricables = {}, capacite = nil, cibles = nil, connecte = true, codes = {}, exceptions = {},
-    taches = {}, noms = {}, objets_illisibles = false, appels = {}, livre = {},
+    taches = {}, noms = {}, variantes = {}, objets_illisibles = false, appels = {}, livre = {},
   }
   local pont = {}
 
@@ -29,11 +30,40 @@ function pont_me.creer()
     end
   end
 
-  local function item(nom)
-    return {
+  -- Item `nom` : la variante sans composants (champ `nbt` absent), ou `variante` ({ nbt, count, displayName? }).
+  local function item(nom, variante)
+    local resultat = {
       name = nom, count = etat.stock[nom] or 0, displayName = etat.noms[nom] or nom, maxStackSize = 64, tags = {},
-      components = {}, nbt = "", isCraftable = etat.fabricables[nom] == true,
+      components = {}, isCraftable = etat.fabricables[nom] == true,
     }
+    if variante then
+      resultat.count, resultat.nbt = variante.count, variante.nbt
+      resultat.displayName = variante.displayName or resultat.displayName
+      resultat.components = { nbt = variante.nbt }
+    end
+    return resultat
+  end
+
+  -- Items stockés (count > 0) qui passent `filtre` ({ name?, nbtHash? }), triés par nom puis variante.
+  local function stockes(filtre)
+    local noms, vus = {}, {}
+    for nom in pairs(etat.stock) do if not vus[nom] then vus[nom] = true; noms[#noms + 1] = nom end end
+    for nom in pairs(etat.variantes) do if not vus[nom] then vus[nom] = true; noms[#noms + 1] = nom end end
+    table.sort(noms)
+    local liste = {}
+    for _, nom in ipairs(noms) do
+      if filtre.name == nil or filtre.name == nom then
+        if (etat.stock[nom] or 0) > 0 and (filtre.nbtHash == nil or filtre.nbtHash == "") then
+          liste[#liste + 1] = item(nom)
+        end
+        for _, variante in ipairs(etat.variantes[nom] or {}) do
+          if variante.count > 0 and (filtre.nbtHash == nil or filtre.nbtHash == variante.nbt) then
+            liste[#liste + 1] = item(nom, variante)
+          end
+        end
+      end
+    end
+    return liste
   end
 
   local function objet_tache(tache)
@@ -55,8 +85,14 @@ function pont_me.creer()
 
   methode("getItem", function(filtre)
     if type(filtre) ~= "table" or filtre.name == nil then return nil, "EMPTY_FILTER" end
-    if (etat.stock[filtre.name] or 0) > 0 or etat.fabricables[filtre.name] then return item(filtre.name) end
+    local premier = stockes(filtre)[1]
+    if premier then return premier end
+    if etat.fabricables[filtre.name] and (filtre.nbtHash == nil or filtre.nbtHash == "") then return item(filtre.name) end
     return nil
+  end)
+
+  methode("getItems", function(filtre)
+    return stockes(type(filtre) == "table" and filtre or {})
   end)
 
   methode("exportItem", function(cible, filtre)
