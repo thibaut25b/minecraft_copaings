@@ -10,6 +10,7 @@ local defauts = require("production.reglages")
 local validation = require("production.validation")
 local debit = require("production.debit")
 local lecture = require("production.lecture")
+local suivi = require("production.suivi")
 local vues = require("production.vues")
 
 local CHEMIN_CONFIG = "/production.cfg"
@@ -22,7 +23,7 @@ local reglages, erreurs_validation = validation.valider(lus, defauts)
 local trace = journal.ouvrir(CHEMIN_JOURNAL, TAILLE_JOURNAL)
 
 -- Les erreurs sont rangées par origine : une étape remplace les siennes sans effacer celles des autres.
-local ORIGINES = { "config", "mesures", "ecran", "interne" }
+local ORIGINES = { "config", "coffre", "mesures", "ecran", "interne" }
 local erreurs = {}
 for _, origine in ipairs(ORIGINES) do erreurs[origine] = {} end
 if erreur_config then erreurs.config[1] = "Config : " .. erreur_config end
@@ -69,9 +70,26 @@ local function trouver_pont()
   return peripheriques.trouver(peripheriques.TYPES.pont_me)
 end
 
+-- Dernier contenu lu du coffre modèle : une panne passagère (chunk déchargé) ne fait rien oublier.
+local contenu_coffre = nil
+
+-- Objets suivis : la config, puis le coffre modèle relu à chaque mesure ; en panne, son dernier contenu lu.
+local function actualiser_objets()
+  erreurs.coffre = {}
+  if reglages.coffre ~= "" then
+    local contenu, message = lecture.lire_coffre(peripheriques.par_nom(reglages.coffre), reglages.coffre)
+    if message then erreurs.coffre[1] = message else contenu_coffre = contenu end
+  end
+  etat.objets = suivi.fusionner(reglages.objets, contenu_coffre)
+  suivi.oublier(etat.series, etat.objets)
+  suivi.oublier(etat.departs, etat.objets)
+  suivi.oublier(etat.noms, etat.objets)
+end
+
 local function mesurer()
   local instant = os.epoch("utc") / 1000
-  local quantites, noms, messages = lecture.lire(trouver_pont(), reglages.objets)
+  actualiser_objets()
+  local quantites, noms, messages = lecture.lire(trouver_pont(), etat.objets)
   erreurs.mesures = messages
   etat.quantites = quantites
   for objet, nom in pairs(noms) do etat.noms[objet] = nom end

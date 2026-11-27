@@ -4,10 +4,12 @@ local verif = require("verif")
 colors = require("faux.couleurs")
 local systeme = require("faux.systeme")
 local pont_me = require("faux.pont_me")
+local coffre = require("faux.coffre")
+local vers_cc = require("commun.texte").vers_cc
 
-local function lancer(presents, types, arguments)
+local function lancer(presents, types, arguments, config)
   local disque = systeme.installer()
-  disque.disque["production.cfg"] = textutils.serialize({ objets = { { objet = "minecraft:iron_ingot", nom = "" } } })
+  disque.disque["production.cfg"] = textutils.serialize(config or { objets = { { objet = "minecraft:iron_ingot", nom = "" } } })
   peripheral = {
     find = function(type_voulu)
       for nom, objet in pairs(presents) do
@@ -67,5 +69,21 @@ return {
     local disque, texte = lancer({}, {}, { "fer" })
     verif.vrai(texte:find("ME Bridge : introuvable", 1, true), texte)
     verif.vrai(disque.disque["production-diag.txt"] ~= nil)
+  end,
+
+  diag_montre_le_contenu_du_coffre_modele_et_lit_ses_objets = function()
+    local c = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [1] = { name = "minecraft:iron_ingot", count = 1 },
+      [4] = { name = "minecraft:gold_ingot", count = 2 } })
+    local _, texte = lancer({ pont_0 = pont_garni(), chest_0 = c }, { pont_0 = "me_bridge", chest_0 = "minecraft:chest" },
+      nil, { coffre = "chest_0" })
+    verif.vrai(texte:find(vers_cc("Coffre modèle chest_0 :\n  minecraft:iron_ingot\n  minecraft:gold_ingot"), 1, true), texte)
+    verif.vrai(texte:find("minecraft:gold_ingot = 0", 1, true), texte)
+  end,
+
+  diag_signale_un_coffre_absent_ou_non_configure = function()
+    local _, texte = lancer({ pont_0 = pont_garni() }, { pont_0 = "me_bridge" }, nil, { coffre = "chest_9" })
+    verif.vrai(texte:find(vers_cc("Coffre modèle absent : chest_9"), 1, true), texte)
+    _, texte = lancer({ pont_0 = pont_garni() }, { pont_0 = "me_bridge" })
+    verif.vrai(texte:find(vers_cc("Coffre modèle : non configuré"), 1, true), texte)
   end,
 }

@@ -1,4 +1,4 @@
--- Lecture des quantités d'items dans l'AE via le ME Bridge (seul module de production qui touche le pont).
+-- Lecture du stock via le ME Bridge et du contenu du coffre modèle (seul module de production qui touche ces périphériques).
 
 local peripheriques = require("commun.peripheriques")
 
@@ -35,6 +35,16 @@ function lecture.lire(pont, objets)
     end
   end
   return quantites, noms, erreurs
+end
+
+--- Contenu de l'inventaire `inventaire` nommé `nom` : `{ [emplacement] = { name, count } }`, ou nil et un
+--- message d'erreur si l'inventaire est absent ou en panne.
+function lecture.lire_coffre(inventaire, nom)
+  if inventaire == nil then return nil, "Coffre modèle absent : " .. tostring(nom) end
+  local ok, contenu = peripheriques.appel(inventaire, "list")
+  if not ok then return nil, "Coffre modèle : " .. tostring(contenu) end
+  if type(contenu) ~= "table" then return nil, "Coffre modèle : contenu illisible" end
+  return contenu
 end
 
 return lecture

@@ -18,6 +18,7 @@ return {
     { depot = "projets/production/reglages.lua", ordinateur = "production/reglages.lua" },
     { depot = "projets/production/validation.lua", ordinateur = "production/validation.lua" },
     { depot = "projets/production/debit.lua", ordinateur = "production/debit.lua" },
+    { depot = "projets/production/suivi.lua", ordinateur = "production/suivi.lua" },
     { depot = "projets/production/lecture.lua", ordinateur = "production/lecture.lua" },
     { depot = "projets/production/vues/base.lua", ordinateur = "production/vues/base.lua" },
     { depot = "projets/production/vues/liste.lua", ordinateur = "production/vues/liste.lua" },

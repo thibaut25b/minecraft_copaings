@@ -1,15 +1,16 @@
--- Diagnostic à lancer à la main (/production/diag [texte]) : état du pont, objets configurés, recherche d'identifiants.
+-- Diagnostic à lancer à la main (/production/diag [texte]) : état du pont, coffre modèle, objets configurés, recherche d'identifiants.
 
 package.path = "/?.lua;" .. package.path
 local peripheriques = require("commun.peripheriques")
 local lecture = require("production.lecture")
+local suivi = require("production.suivi")
 local vers_cc = require("commun.texte").vers_cc
 
 local FICHIER = "/production-diag.txt"
 local CONFIG = "/production.cfg"
 local MAX_AFFICHES = 30
 
-local lignes, rapport = {}, { visibles = peripheriques.visibles(), objets = {}, trouves = {} }
+local lignes, rapport = {}, { visibles = peripheriques.visibles(), objets = {}, trouves = {}, coffre = {} }
 local recherche = ({ ... })[1]
 
 local function noter(texte) lignes[#lignes + 1] = texte end
@@ -48,12 +49,31 @@ else
     .. tostring(rapport.pont.isOnline))
 end
 
-local objets = {}
+local configures = {}
 for _, entree in ipairs(type(lus.objets) == "table" and lus.objets or {}) do
   if type(entree) == "table" and type(entree.objet) == "string" then
-    objets[#objets + 1] = { objet = entree.objet, nom = type(entree.nom) == "string" and entree.nom or "" }
+    configures[#configures + 1] = { objet = entree.objet, nom = type(entree.nom) == "string" and entree.nom or "" }
   end
 end
+
+local contenu
+if type(lus.coffre) ~= "string" or lus.coffre == "" then
+  noter("Coffre modèle : non configuré (réglage coffre)")
+else
+  local message
+  contenu, message = lecture.lire_coffre(peripheriques.par_nom(lus.coffre), lus.coffre)
+  rapport.coffre = { nom = lus.coffre, contenu = contenu, erreur = message }
+  if message then
+    noter("Erreur : " .. message)
+  else
+    noter("Coffre modèle " .. lus.coffre .. " :")
+    local modeles = suivi.fusionner({}, contenu)
+    for _, entree in ipairs(modeles) do noter("  " .. entree.objet) end
+    if #modeles == 0 then noter("  vide") end
+  end
+end
+
+local objets = suivi.fusionner(configures, contenu)
 local quantites, noms, erreurs = lecture.lire(pont, objets)
 for _, entree in ipairs(objets) do
   local quantite = quantites[entree.objet]

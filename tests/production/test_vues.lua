@@ -130,5 +130,13 @@ return {
     local m = dessiner(100, 38, { erreurs = { "ME Bridge absent" }, vide = true })
     present(m, "! ME Bridge absent")
     present(m, "Aucun objet suivi")
+    present(m, "Coffre modèle")
+    present(m, "/production.cfg")
+  end,
+
+  sans_objet_le_message_des_deux_methodes_tient_aussi_en_compact = function()
+    local m = dessiner(51, 19, { vide = true })
+    present(m, "Coffre modèle")
+    present(m, "/production.cfg")
   end,
 }

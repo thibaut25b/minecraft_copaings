@@ -3,6 +3,7 @@
 local verif = require("verif")
 local faux = require("faux.pont_me")
 local lecture = require("production.lecture")
+local coffre = require("faux.coffre")
 
 local function contient(erreurs, motif)
   for _, message in ipairs(erreurs) do
@@ -83,5 +84,26 @@ return {
     local quantites, _, erreurs = lecture.lire(pont, { { objet = "a:b", nom = "" } })
     verif.egal(quantites, {})
     verif.vrai(contient(erreurs, "quantité illisible"))
+  end,
+
+  le_contenu_du_coffre_est_le_resultat_de_list = function()
+    local c = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [3] = { name = "a:b", count = 5 } })
+    local contenu, erreur = lecture.lire_coffre(c, "chest_0")
+    verif.egal(contenu, { [3] = { name = "a:b", count = 5 } })
+    verif.egal(erreur, nil)
+  end,
+
+  un_coffre_absent_donne_un_message_et_aucun_contenu = function()
+    local contenu, erreur = lecture.lire_coffre(nil, "chest_9")
+    verif.egal(contenu, nil)
+    verif.egal(erreur, "Coffre modèle absent : chest_9")
+  end,
+
+  un_coffre_en_panne_donne_un_message_sans_lever = function()
+    local c = coffre.nouveau(coffre.reseau(), "chest_0", 27)
+    c.panne = "chunk déchargé"
+    local contenu, erreur = lecture.lire_coffre(c, "chest_0")
+    verif.egal(contenu, nil)
+    verif.vrai(erreur:find("chunk déchargé", 1, true), erreur)
   end,
 }
