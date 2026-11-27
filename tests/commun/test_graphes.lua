@@ -145,6 +145,23 @@ return {
     verif.vrai(dans_le_cadre(rouges, cadre))
   end,
 
+  courbe_laisse_un_trou_sur_un_point_sans_donnee = function()
+    local toile = nouvelle()
+    local cadre = { x = 1, y = 1, largeur = LARGEUR, hauteur = HAUTEUR }
+    graphes.courbe(toile, cadre, { 1, 1, false, false, 1, 1 }, { couleur = colors.red, min = 0, max = 2 })
+    verif.egal(lit(toile, 1, HAUTEUR / 2), colors.red)
+    verif.egal(lit(toile, LARGEUR / 2, HAUTEUR / 2), colors.black)
+    verif.egal(lit(toile, LARGEUR, HAUTEUR / 2), colors.red)
+  end,
+
+  courbe_bornee_au_plafond_reste_dans_le_cadre = function()
+    local toile = nouvelle()
+    local cadre = { x = 1, y = 1, largeur = LARGEUR, hauteur = HAUTEUR }
+    graphes.courbe(toile, cadre, { 1, 50, 1 }, { couleur = colors.red, min = 0, max = 2, remplissage = colors.blue })
+    verif.vrai(dans_le_cadre(allumes(toile, colors.red), cadre))
+    verif.egal(lit(toile, LARGEUR / 2, 1), colors.red)
+  end,
+
   histogramme_laisse_l_ecart_demande_entre_les_barres = function()
     local toile = nouvelle()
     local cadre = { x = 1, y = 1, largeur = 11, hauteur = 6 }

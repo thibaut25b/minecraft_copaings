@@ -9,6 +9,7 @@ local faux_moniteur = require("faux.moniteur")
 local vers_cc = require("commun.texte").vers_cc
 
 local depaqueter = table.unpack or unpack
+local classement = require("production.classement")
 
 local TYPES = { pont_0 = "me_bridge", monitor_0 = "monitor", chest_0 = "minecraft:chest" }
 local FER = "minecraft:iron_ingot"
@@ -22,7 +23,7 @@ local function monde(reglages)
   m.pont, m.etat_pont = pont, etat
   m.presents = { pont_0 = pont, monitor_0 = faux_moniteur.nouveau(100, 38) }
   m.presents.monitor_0.setTextScale = function() end
-  m.disque.disque["production.cfg"] = textutils.serialize(reglages or { periode = 2, objets = { { objet = FER, nom = "" } } })
+  m.disque.disque["production.cfg"] = textutils.serialize(reglages or { periode = 2, tout = false, objets = { { objet = FER, nom = "" } } })
   return m
 end
 
@@ -94,10 +95,16 @@ return {
     present(m, "+300")
   end,
 
+  la_premiere_mesure_sert_de_base_et_le_dit = function()
+    local m = monde()
+    lancer(m, 0)
+    present(m, "Base prise : premiers débits dans")
+  end,
+
   les_noms_lus_dans_l_ae_sont_retenus_quand_le_pont_disparait = function()
     local m = monde()
     lancer(m, 3, function(tour)
-      if tour == 2 then m.etat_pont.exceptions.getItem = "pont débranché" end
+      if tour == 2 then m.etat_pont.exceptions.getItems = "pont débranché" end
       return { "production_affichage" }
     end)
     present(m, "Iron Ingot")
@@ -114,7 +121,7 @@ return {
   end,
 
   le_pont_nomme_dans_la_config_est_celui_qui_est_lu = function()
-    local m = monde({ pont = "pont_2", periode = 2, objets = { { objet = FER, nom = "" } } })
+    local m = monde({ pont = "pont_2", periode = 2, tout = false, objets = { { objet = FER, nom = "" } } })
     local autre, etat = pont_me.creer()
     etat.stock[FER] = 777
     m.presents.pont_2 = autre
@@ -132,19 +139,20 @@ return {
     present(m, "+1 800")
   end,
 
-  toucher_reset_vide_la_serie_et_le_depart_de_l_objet = function()
+  toucher_reset_remet_le_depart_de_l_objet_a_zero = function()
     local m = monde()
     lancer(m, 7, function(tour)
       m.etat_pont.stock[FER] = 100 + 10 * tour
       if tour == 5 then return toucher(m, "Reset") end
       return { "production_affichage" }
     end)
-    local _, y = ecran(m).chercher(vers_cc("Depuis le début"))
-    verif.vrai(ecran(m).ligne(y):find("+10 en 2 s", 1, true), ecran(m).ligne(y))
+    local _, y = ecran(m).chercher(vers_cc("Départ"))
+    verif.vrai(ecran(m).ligne(y):find("+20 en 4 s", 1, true), ecran(m).ligne(y))
   end,
 
   toucher_une_ligne_choisit_l_objet_dont_le_detail_s_affiche = function()
-    local m = monde({ periode = 2, objets = { { objet = FER, nom = "" }, { objet = "minecraft:gold_ingot", nom = "Or" } } })
+    local m = monde({ periode = 2, tout = false,
+      objets = { { objet = FER, nom = "" }, { objet = "minecraft:gold_ingot", nom = "Or" } } })
     lancer(m, 3, function(tour)
       if tour == 3 then return toucher(m, "Or") end
       return { "production_affichage" }
@@ -153,8 +161,58 @@ return {
     verif.vrai(ecran(m).ligne(y):find("Or", 1, true), ecran(m).ligne(y))
   end,
 
+  la_vue_tout_ne_liste_que_ce_qui_bouge = function()
+    local m = monde({ periode = 2, objets = { { objet = FER, nom = "" } } })
+    m.etat_pont.stock["minecraft:stone"] = 64
+    m.etat_pont.noms["minecraft:stone"] = "Stone"
+    lancer(m, 4, function(tour)
+      m.etat_pont.stock[FER] = 100 + 10 * tour
+      return { "production_affichage" }
+    end)
+    present(m, "Iron Ingot")
+    verif.egal(ecran(m).chercher("Stone"), nil)
+  end,
+
+  le_classement_se_calcule_par_mesure_ou_par_action_jamais_par_dessin = function()
+    local m = monde()
+    local original, appels = classement.ecran, 0
+    classement.ecran = function(...)
+      appels = appels + 1
+      return original(...)
+    end
+    local ok, erreur = pcall(lancer, m, 5, function(tour)
+      if tour == 5 then return toucher(m, "1 h") end
+      return { "monitor_resize" }
+    end)
+    classement.ecran = original
+    verif.vrai(ok, tostring(erreur))
+    verif.egal(appels, #pont_me.appels_de(m.etat_pont, "getItems") + 1)
+  end,
+
+  une_coupure_est_ignoree_et_affichee = function()
+    local m = monde({ periode = 2, objets = { { objet = FER, nom = "" } } })
+    for i = 1, 30 do m.etat_pont.stock["a:objet_" .. i] = 50 end
+    lancer(m, 3, function(tour)
+      if tour == 3 then
+        for i = 1, 30 do m.etat_pont.stock["a:objet_" .. i] = nil end
+      end
+      return { "production_affichage" }
+    end)
+    present(m, "Lecture ignorée : réseau AE incomplet")
+  end,
+
+  des_milliers_de_types_rendent_la_main_pendant_le_traitement = function()
+    local m = monde({ periode = 2, objets = { { objet = FER, nom = "" } } })
+    for i = 1, 2500 do m.etat_pont.stock["a:objet_" .. i] = i end
+    local pauses = 0
+    lancer(m, 6, nil, function()
+      os.queueEvent = function(nom) if nom == "production_pause" then pauses = pauses + 1 end end
+    end)
+    verif.vrai(pauses >= 2, "pauses : " .. pauses)
+  end,
+
   config_fautive_est_signalee_et_le_reste_tourne = function()
-    local m = monde({ periode = 2, objets = { { objet = FER, nom = "" }, { objet = FER, nom = "" } } })
+    local m = monde({ periode = 2, tout = false, objets = { { objet = FER, nom = "" }, { objet = FER, nom = "" } } })
     lancer(m, 2)
     present(m, "déjà suivi")
     present(m, "Iron Ingot")
@@ -180,22 +238,24 @@ return {
     verif.vrai(m.disque.disque["production.log"]:find("modem en panne", 1, true))
   end,
 
-  un_item_ajoute_au_coffre_modele_est_suivi_sans_redemarrer = function()
-    local m = monde({ periode = 2, coffre = "chest_0", objets = { { objet = FER, nom = "" } } })
+  un_id_nouveau_en_mode_suivi_ne_compte_pas_son_stock_comme_production = function()
+    local m = monde({ periode = 2, tout = false, coffre = "chest_0", objets = { { objet = FER, nom = "" } } })
     local c = coffre.nouveau(coffre.reseau(), "chest_0", 27)
     m.presents.chest_0 = c
     m.etat_pont.stock["minecraft:gold_ingot"] = 55
     m.etat_pont.noms["minecraft:gold_ingot"] = "Gold Ingot"
-    lancer(m, 4, function(tour)
+    lancer(m, 5, function(tour)
       if tour == 2 then c.emplacements[3] = { name = "minecraft:gold_ingot", count = 1 } end
       return { "production_affichage" }
     end)
     present(m, "Iron Ingot")
-    present(m, "Gold Ingot")
+    local _, y = ecran(m).chercher("Gold Ingot")
+    verif.vrai(y, ecran(m).texte())
+    verif.egal(ecran(m).ligne(y):find("+", 1, true), nil, ecran(m).ligne(y))
   end,
 
   un_item_retire_du_coffre_modele_disparait_et_la_selection_retombe_sur_le_premier = function()
-    local m = monde({ periode = 2, coffre = "chest_0", objets = { { objet = FER, nom = "" } } })
+    local m = monde({ periode = 2, tout = false, coffre = "chest_0", objets = { { objet = FER, nom = "" } } })
     local c = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [1] = { name = "minecraft:gold_ingot", count = 1 } })
     m.presents.chest_0 = c
     m.etat_pont.stock["minecraft:gold_ingot"] = 55
@@ -210,22 +270,8 @@ return {
     verif.vrai(ecran(m).ligne(y):find("Iron Ingot", 1, true), ecran(m).ligne(y))
   end,
 
-  un_item_retire_du_coffre_modele_est_oublie_et_repart_de_zero_quand_il_revient = function()
-    local m = monde({ periode = 2, coffre = "chest_0", objets = {} })
-    local c = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [1] = { name = FER, count = 1 } })
-    m.presents.chest_0 = c
-    lancer(m, 8, function(tour)
-      m.etat_pont.stock[FER] = 100 + 10 * tour
-      if tour == 3 then c.emplacements[1] = nil end
-      if tour == 6 then c.emplacements[1] = { name = FER, count = 1 } end
-      return { "production_affichage" }
-    end)
-    local _, y = ecran(m).chercher(vers_cc("Depuis le début"))
-    verif.vrai(ecran(m).ligne(y):find("+20 en 4 s", 1, true), ecran(m).ligne(y))
-  end,
-
   un_coffre_modele_absent_s_affiche_se_journalise_et_la_config_reste_suivie = function()
-    local m = monde({ periode = 2, coffre = "chest_9", objets = { { objet = FER, nom = "" } } })
+    local m = monde({ periode = 2, tout = false, coffre = "chest_9", objets = { { objet = FER, nom = "" } } })
     lancer(m, 4)
     present(m, "Coffre modèle absent : chest_9")
     present(m, "Iron Ingot")
@@ -234,7 +280,7 @@ return {
   end,
 
   un_coffre_modele_en_panne_s_affiche_et_garde_son_dernier_contenu_et_son_historique = function()
-    local m = monde({ periode = 2, coffre = "chest_0", objets = { { objet = FER, nom = "" } } })
+    local m = monde({ periode = 2, tout = false, coffre = "chest_0", objets = { { objet = FER, nom = "" } } })
     local c = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [1] = { name = "minecraft:gold_ingot", count = 1 } })
     m.presents.chest_0 = c
     m.etat_pont.noms["minecraft:gold_ingot"] = "Gold Ingot"
@@ -248,13 +294,14 @@ return {
     present(m, "Iron Ingot")
     present(m, "Gold Ingot")
     verif.vrai(m.disque.disque["production.log"]:find("coffre débranché", 1, true))
-    local _, y = ecran(m).chercher(vers_cc("Depuis le début"))
+    local _, y = ecran(m).chercher(vers_cc("Départ"))
     verif.vrai(ecran(m).ligne(y):find("+80 en 16 s", 1, true), ecran(m).ligne(y))
   end,
 
   sans_coffre_configure_le_premier_inventaire_du_reseau_n_est_pas_pris = function()
-    local m = monde({ periode = 2, objets = { { objet = FER, nom = "" } } })
-    m.presents.chest_0 = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [1] = { name = "minecraft:gold_ingot", count = 1 } })
+    local m = monde({ periode = 2, tout = false, objets = { { objet = FER, nom = "" } } })
+    m.presents.chest_0 = coffre.nouveau(coffre.reseau(), "chest_0", 27,
+      { [1] = { name = "minecraft:gold_ingot", count = 1 } })
     lancer(m, 3)
     verif.egal(ecran(m).chercher("gold_ingot"), nil)
   end,

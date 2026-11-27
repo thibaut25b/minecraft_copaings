@@ -11,11 +11,11 @@ function coffre.reseau()
 end
 
 local function copie(pile)
-  return pile and { name = pile.name, count = pile.count } or nil
+  return pile and { name = pile.name, count = pile.count, nbt = pile.nbt } or nil
 end
 
 --- Crée l'inventaire `nom` de `taille` emplacements dans `reseau`, rempli de `contenu` ({ [emplacement] = { name,
---- count } }). Champs de test : `panne` (texte : toute méthode lève ce message), `emplacements` (contenu brut),
+--- count, nbt? } }). Champs de test : `panne` (texte : toute méthode lève ce message), `emplacements` (contenu brut),
 --- `avant_deplacement(emplacement)` (appelé au début de pushItems et pullItems, pour changer le contenu entre
 --- deux appels comme le ferait un joueur ou un entonnoir).
 function coffre.nouveau(reseau, nom, taille, contenu)

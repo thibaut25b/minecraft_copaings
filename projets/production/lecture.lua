@@ -4,40 +4,36 @@ local peripheriques = require("commun.peripheriques")
 
 local lecture = {}
 
---- Lit le stock de chaque entrée de `objets` ({ objet, nom }) sur `pont`. Renvoie `quantites` ({ [objet] =
---- quantité }, absent de l'AE = 0, illisible = pas de clé), `noms` ({ [objet] = nom affiché } pour les entrées
---- dont `nom` est "" et que l'AE connaît) et la liste des messages d'erreur. Pont hors réseau : un seul message.
-function lecture.lire(pont, objets)
-  local quantites, noms, erreurs = {}, {}, {}
-  if pont == nil then
-    erreurs[1] = "ME Bridge absent"
-    return quantites, noms, erreurs
-  end
-  for _, entree in ipairs(objets) do
-    local ok, item, code = peripheriques.appel(pont, "getItem", { name = entree.objet })
-    if not ok then
-      erreurs[#erreurs + 1] = entree.objet .. " : " .. tostring(item)
-    elseif item == nil and code == nil then
-      quantites[entree.objet] = 0
-    elseif item == nil then
-      if code == "NOT_CONNECTED" then
-        erreurs[#erreurs + 1] = "ME Bridge hors réseau (NOT_CONNECTED)"
-        return quantites, noms, erreurs
-      end
-      erreurs[#erreurs + 1] = entree.objet .. " : " .. tostring(code)
-    elseif type(item) ~= "table" or type(item.count) ~= "number" then
-      erreurs[#erreurs + 1] = entree.objet .. " : quantité illisible"
-    else
-      quantites[entree.objet] = item.count
-      if entree.nom == "" and type(item.displayName) == "string" and item.displayName ~= "" then
-        noms[entree.objet] = item.displayName
-      end
-    end
-  end
-  return quantites, noms, erreurs
+-- Items de `getItems(filtre)` sur `pont`, ou nil et un message (préfixé de `quoi` sauf hors réseau).
+local function lire_items(pont, filtre, quoi)
+  local ok, items, code = peripheriques.appel(pont, "getItems", filtre)
+  if not ok then return nil, quoi .. " : " .. tostring(items) end
+  if items == nil and code == "NOT_CONNECTED" then return nil, "ME Bridge hors réseau (NOT_CONNECTED)" end
+  if items == nil then return nil, quoi .. " : " .. tostring(code) end
+  if type(items) ~= "table" then return nil, quoi .. " : liste illisible" end
+  return items
 end
 
---- Contenu de l'inventaire `inventaire` nommé `nom` : `{ [emplacement] = { name, count } }`, ou nil et un
+--- Tous les items du réseau (`getItems()` : une entrée par variante), ou nil et un message.
+function lecture.lire_tout(pont)
+  if pont == nil then return nil, "ME Bridge absent" end
+  return lire_items(pont, nil, "getItems")
+end
+
+--- Items des `ids` (un `getItems({ name = id })` par id, listes mises bout à bout), ou nil et le message du
+--- premier échec : une lecture partielle ferait croire à une consommation.
+function lecture.lire_ids(pont, ids)
+  if pont == nil then return nil, "ME Bridge absent" end
+  local tous = {}
+  for _, id in ipairs(ids) do
+    local items, message = lire_items(pont, { name = id }, id)
+    if not items then return nil, message end
+    for _, item in ipairs(items) do tous[#tous + 1] = item end
+  end
+  return tous
+end
+
+--- Contenu de l'inventaire `inventaire` nommé `nom` : `{ [emplacement] = { name, count, nbt? } }`, ou nil et un
 --- message d'erreur si l'inventaire est absent ou en panne.
 function lecture.lire_coffre(inventaire, nom)
   if inventaire == nil then return nil, "Coffre modèle absent : " .. tostring(nom) end

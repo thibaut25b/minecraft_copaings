@@ -18,7 +18,7 @@ end
 local function bornes(valeurs, options, inclure_zero)
   local bas, haut = math.huge, -math.huge
   for _, valeur in ipairs(valeurs) do
-    bas, haut = math.min(bas, valeur), math.max(haut, valeur)
+    if valeur then bas, haut = math.min(bas, valeur), math.max(haut, valeur) end
   end
   if inclure_zero then bas, haut = math.min(bas, 0), math.max(haut, 0) end
   return options.min or bas, options.max or haut
@@ -55,8 +55,9 @@ local function parcourir_disque(toile, cx, cy, rayon, visiteur)
   end
 end
 
---- Courbe des `valeurs` (liste, éventuellement vide) sur toute la largeur du cadre ; `remplissage` colore sous la
---- courbe ; échelle `min`..`max` (par défaut les extrêmes) ; des valeurs égales donnent une ligne à mi-hauteur.
+--- Courbe des `valeurs` (liste, éventuellement vide ; `false` = point sans donnée, laissé en trou) sur toute la
+--- largeur du cadre ; `remplissage` colore sous la courbe ; échelle `min`..`max` (par défaut les extrêmes), une valeur
+--- hors échelle est bornée au cadre ; des valeurs égales donnent une ligne à mi-hauteur.
 function graphes.courbe(toile, cadre, valeurs, options)
   local x, y, largeur, hauteur = lire_cadre(cadre)
   local nombre = #valeurs
@@ -67,16 +68,24 @@ function graphes.courbe(toile, cadre, valeurs, options)
   for colonne = 0, largeur - 1 do
     local t = largeur > 1 and colonne * (nombre - 1) / (largeur - 1) or 0
     local indice = math.floor(t)
-    local depart = valeurs[indice + 1]
-    local valeur = depart + (valeurs[math.min(indice + 2, nombre)] - depart) * (t - indice)
-    hauteurs[colonne] = pied - arrondi((fraction(valeur, bas, haut) or 0.5) * (hauteur - 1))
+    local depart, arrivee = valeurs[indice + 1], valeurs[math.min(indice + 2, nombre)]
+    if t == indice then arrivee = depart end
+    if depart and arrivee then
+      local valeur = depart + (arrivee - depart) * (t - indice)
+      hauteurs[colonne] = pied - arrondi((fraction(valeur, bas, haut) or 0.5) * (hauteur - 1))
+    end
   end
   if options.remplissage then
-    for colonne = 0, largeur - 1 do toile.ligne(x + colonne, hauteurs[colonne], x + colonne, pied, options.remplissage) end
+    for colonne = 0, largeur - 1 do
+      if hauteurs[colonne] then toile.ligne(x + colonne, hauteurs[colonne], x + colonne, pied, options.remplissage) end
+    end
   end
   for colonne = 0, largeur - 1 do
     local suivante = math.min(colonne + 1, largeur - 1)
-    toile.ligne(x + colonne, hauteurs[colonne], x + suivante, hauteurs[suivante], options.couleur)
+    if hauteurs[colonne] then
+      local vers = hauteurs[suivante] and suivante or colonne
+      toile.ligne(x + colonne, hauteurs[colonne], x + vers, hauteurs[vers], options.couleur)
+    end
   end
 end
 

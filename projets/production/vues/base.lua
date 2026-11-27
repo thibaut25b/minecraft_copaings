@@ -1,76 +1,81 @@
--- Briques des vues de la production : objet choisi, noms, textes et couleurs des débits, zones touchables.
+-- Briques des vues de la production : objet choisi, nom, textes et couleurs des débits, durées, zones touchables.
 
 local texte = require("commun.texte")
 local theme = require("commun.theme")
-local debit = require("production.debit")
+local flux = require("production.flux")
+local inventaire = require("production.inventaire")
 
 local R = theme.ROLES
 
 local base = {}
 
---- Fenêtres des débits moyens du détail, en secondes, avec leur libellé.
-base.FENETRES = { { 10, "10 s" }, { 60, "1 min" }, { 600, "10 min" }, { 3600, "1 h" } }
+--- Libellé de chaque fenêtre de débit (secondes).
+base.LIBELLES_FENETRES = { [60] = "1 min", [600] = "10 min", [3600] = "1 h" }
 
---- Fenêtre du débit montré dans la liste, en secondes.
-base.FENETRE_LISTE = 60
+--- Lignes de la vue de l'onglet actif : alertes sur l'onglet "alertes", sinon lignes classées ({} sans classement).
+function base.lignes(etat)
+  local contenu = etat.classement
+  if not contenu then return {} end
+  if etat.onglet == "alertes" then return contenu.alertes end
+  return contenu.lignes
+end
 
---- Identifiant de l'objet choisi : `etat.selection` s'il est suivi, sinon le premier objet, nil sans objet.
+--- Clé de l'objet choisi : `etat.selection` si elle est dans les lignes de la vue, sinon la première ligne, nil sans
+--- ligne.
 function base.selection(etat)
-  if base.entree(etat, etat.selection) then return etat.selection end
-  return etat.objets[1] and etat.objets[1].objet or nil
-end
-
---- Entrée { objet, nom } suivie sous l'identifiant `objet`, ou nil.
-function base.entree(etat, objet)
-  for _, entree in ipairs(etat.objets) do
-    if entree.objet == objet then return entree end
+  local lignes = base.lignes(etat)
+  for _, ligne in ipairs(lignes) do
+    if ligne.cle == etat.selection then return ligne.cle end
   end
-  return nil
+  return lignes[1] and lignes[1].cle or nil
 end
 
---- Nom affiché d'une `entree` { objet, nom } : son nom de config, sinon celui lu dans l'AE, sinon l'identifiant.
-function base.nom(etat, entree)
-  if entree.nom ~= "" then return entree.nom end
-  return (etat.noms or {})[entree.objet] or entree.objet
+--- Nom affiché de `cle` : celui de sa ligne au classement, sinon celui lu dans l'AE, sinon son identifiant.
+function base.nom(etat, cle)
+  for _, liste in ipairs({ etat.classement and etat.classement.lignes or {}, base.lignes(etat) }) do
+    for _, ligne in ipairs(liste) do
+      if ligne.cle == cle then return ligne.nom end
+    end
+  end
+  local objet = etat.flux and etat.flux.objets[cle]
+  return (objet and objet.nom) or (inventaire.decouper(cle))
 end
 
---- Stock lu à la dernière mesure : « 12 480 », ou « ? » s'il est illisible.
-function base.stock(etat, objet)
-  local quantite = (etat.quantites or {})[objet]
-  return quantite and texte.milliers(quantite) or "?"
-end
-
--- Débit signé à un chiffre après la virgule sous 10, entier au-delà.
-local function nombre_signe(valeur)
+--- Nombre sans signe à un chiffre après la virgule sous 10, entier au-delà : « 2,5 », « 1 250 », « 0 ».
+function base.nombre(valeur)
   local absolu = math.abs(valeur)
   if absolu < 0.05 then return "0" end
-  local signe = valeur < 0 and "-" or "+"
-  if absolu < 10 then return signe .. string.format("%.1f", absolu):gsub("%.", ",") end
-  return signe .. texte.milliers(absolu)
+  if absolu < 10 then return (string.format("%.1f", absolu):gsub("%.", ",")) end
+  return texte.milliers(absolu)
 end
 
---- Débit en items/s (nil : pas encore mesurable) converti dans l'unité : « +12,5 », « ~-3 » si `partiel`, « - » si nil.
+--- Débit en items/s converti dans l'unité : « +12,5 », « ~-3 » si `partiel`.
 function base.texte_debit(par_seconde, partiel, unite)
-  if par_seconde == nil then return "-" end
-  return (partiel and "~" or "") .. nombre_signe(debit.convertir(par_seconde, unite))
+  local valeur = flux.convertir(par_seconde, unite)
+  local signe = math.abs(valeur) < 0.05 and "" or (valeur < 0 and "-" or "+")
+  return (partiel and "~" or "") .. signe .. base.nombre(valeur)
 end
 
---- Rôle de couleur d'un débit : bon s'il monte, mauvais s'il baisse, discret s'il est inconnu, texte à zéro.
+--- Débit sans signe ni tilde, avec son unité : « 1 250 /min ».
+function base.texte_absolu(par_seconde, unite)
+  return base.nombre(flux.convertir(par_seconde, unite)) .. " " .. flux.LIBELLES[unite]
+end
+
+--- Rôle de couleur d'un débit signé : bon s'il monte, mauvais s'il baisse, discret à zéro (dans l'unité).
 function base.couleur_debit(par_seconde, unite)
-  if par_seconde == nil then return R.discret end
-  local valeur = debit.convertir(par_seconde, unite)
-  if math.abs(valeur) < 0.05 then return R.texte end
+  local valeur = flux.convertir(par_seconde, unite)
+  if math.abs(valeur) < 0.05 then return R.discret end
   return valeur > 0 and R.bon or R.mauvais
 end
 
---- Durée en secondes lisible : « 45 s », « 12 min », « 3 h 20 min ».
+--- Durée en secondes lisible : « 45 s », « 12 min », « 3 h », « 3 h 20 min ».
 function base.duree(secondes)
   secondes = math.floor(secondes + 0.5)
   if secondes < 60 then return secondes .. " s" end
   local minutes = math.floor(secondes / 60)
   if minutes < 60 then return minutes .. " min" end
   local heures = math.floor(minutes / 60)
-  if minutes % 60 == 0 then return heures .. " h" end
+  if minutes % 60 == 0 or heures >= 10 then return heures .. " h" end
   return heures .. " h " .. minutes % 60 .. " min"
 end
 

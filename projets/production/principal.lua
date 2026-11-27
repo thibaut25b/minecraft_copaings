@@ -1,4 +1,4 @@
--- Point d'entrée de la production : débit des items d'un réseau AE2 sur un écran tactile, en deux boucles.
+-- Point d'entrée de la production : flux des items d'un réseau AE2 sur un écran tactile, en deux boucles.
 
 package.path = "/?.lua;" .. package.path
 
@@ -8,7 +8,9 @@ local peripheriques = require("commun.peripheriques")
 local theme = require("commun.theme")
 local defauts = require("production.reglages")
 local validation = require("production.validation")
-local debit = require("production.debit")
+local inventaire = require("production.inventaire")
+local flux = require("production.flux")
+local classement = require("production.classement")
 local lecture = require("production.lecture")
 local suivi = require("production.suivi")
 local vues = require("production.vues")
@@ -17,6 +19,8 @@ local CHEMIN_CONFIG = "/production.cfg"
 local CHEMIN_JOURNAL = "/production.log"
 local TAILLE_JOURNAL = 50000
 local EVENEMENT_AFFICHAGE = "production_affichage"
+local EVENEMENT_PAUSE = "production_pause"
+local MESSAGE_COUPURE = "Lecture ignorée : réseau AE incomplet"
 
 local lus, erreur_config = config.charger(CHEMIN_CONFIG, defauts)
 local reglages, erreurs_validation = validation.valider(lus, defauts)
@@ -29,14 +33,19 @@ for _, origine in ipairs(ORIGINES) do erreurs[origine] = {} end
 if erreur_config then erreurs.config[1] = "Config : " .. erreur_config end
 for _, message in ipairs(erreurs_validation) do erreurs.config[#erreurs.config + 1] = message end
 
-local etat = {
-  heure = "", erreurs = {}, prochaine_mesure = 0, pagination = {}, unite = reglages.unite, selection = nil,
-  objets = reglages.objets, noms = {}, quantites = {}, series = {}, departs = {}, periode = reglages.periode,
-  duree_graphe = reglages.duree_graphe,
+local etat_flux = flux.nouveau()
+local liste_suivie = suivi.fusionner(reglages.objets, nil)
+local options = { tout = reglages.tout, suivis = #reglages.objets > 0 or reglages.coffre ~= "",
+  consommation = reglages.consommation, delai_alerte = reglages.delai_alerte }
+local ecran = {
+  heure = "", erreurs = {}, prochaine_mesure = 0, pagination = {}, options = options,
+  onglet = (vues.onglets(options)[1] or {}).nom, unite = reglages.unite, fenetre = reglages.fenetre,
+  sens = reglages.sens, selection = nil, phase = "attente", flux = etat_flux, instant = nil, classement = nil,
 }
 local internes = {}
 local deja_journalisees = {}
 local echeance_mesure = os.clock()
+local ids_lus = nil
 
 local function rassembler_erreurs()
   local liste = {}
@@ -64,6 +73,12 @@ local function proteger(nom, etape, ...)
   for _, texte in pairs(internes) do erreurs.interne[#erreurs.interne + 1] = texte end
 end
 
+-- Rend la main à CC au milieu d'un long traitement (des milliers de types), sans perdre d'événement utile.
+local function pause()
+  os.queueEvent(EVENEMENT_PAUSE)
+  os.pullEvent(EVENEMENT_PAUSE)
+end
+
 -- Le pont nommé dans la config, sinon le premier ME Bridge visible.
 local function trouver_pont()
   if reglages.pont ~= "" then return peripheriques.par_nom(reglages.pont) end
@@ -73,28 +88,50 @@ end
 -- Dernier contenu lu du coffre modèle : une panne passagère (chunk déchargé) ne fait rien oublier.
 local contenu_coffre = nil
 
--- Objets suivis : la config, puis le coffre modèle relu à chaque mesure ; en panne, son dernier contenu lu.
-local function actualiser_objets()
+-- Liste suivie : la config, puis le coffre modèle relu à chaque mesure ; en panne, son dernier contenu lu.
+local function actualiser_suivis()
   erreurs.coffre = {}
   if reglages.coffre ~= "" then
     local contenu, message = lecture.lire_coffre(peripheriques.par_nom(reglages.coffre), reglages.coffre)
     if message then erreurs.coffre[1] = message else contenu_coffre = contenu end
   end
-  etat.objets = suivi.fusionner(reglages.objets, contenu_coffre)
-  suivi.oublier(etat.series, etat.objets)
-  suivi.oublier(etat.departs, etat.objets)
-  suivi.oublier(etat.noms, etat.objets)
+  liste_suivie = suivi.fusionner(reglages.objets, contenu_coffre)
+end
+
+-- Classement de l'écran : une fois par mesure ou par action touchée, jamais à chaque dessin.
+local function reclasser()
+  if not ecran.instant then return end
+  ecran.classement = classement.ecran(etat_flux, ecran.instant, { fenetre = ecran.fenetre, sens = ecran.sens,
+    onglet = ecran.onglet, suivis = liste_suivie, tout = reglages.tout, pause = pause }, reglages)
+end
+
+-- Items à noter : tout le réseau en un appel, ou les ids suivis ; un changement d'ids refait une base (le stock
+-- d'un id nouveau n'est pas une production).
+local function lire_items(pont)
+  if reglages.tout then return lecture.lire_tout(pont) end
+  local ids = suivi.ids(liste_suivie)
+  local signature = table.concat(ids, " ")
+  if ids_lus ~= nil and signature ~= ids_lus then flux.rebaser(etat_flux) end
+  ids_lus = signature
+  return lecture.lire_ids(pont, ids)
 end
 
 local function mesurer()
   local instant = os.epoch("utc") / 1000
-  actualiser_objets()
-  local quantites, noms, messages = lecture.lire(trouver_pont(), etat.objets)
-  erreurs.mesures = messages
-  etat.quantites = quantites
-  for objet, nom in pairs(noms) do etat.noms[objet] = nom end
-  debit.noter(etat.series, quantites, instant, reglages.duree_historique)
-  debit.noter_departs(etat.departs, quantites, instant)
+  actualiser_suivis()
+  local items, message = lire_items(trouver_pont())
+  if not items then
+    erreurs.mesures = { message }
+    return
+  end
+  local instantane, noms = inventaire.normaliser(items)
+  local statut = flux.noter(etat_flux, instantane, instant, reglages, pause)
+  flux.nommer(etat_flux, noms)
+  erreurs.mesures = statut == "coupure" and { MESSAGE_COUPURE } or {}
+  if statut == "mesure" then ecran.phase = "suivi" end
+  if statut == "base" and ecran.phase == "attente" then ecran.phase = "base" end
+  ecran.instant = etat_flux.instant
+  reclasser()
 end
 
 -- Sans moniteur, le tableau de bord se dessine sur le terminal de l'ordinateur.
@@ -107,13 +144,13 @@ local function cible_affichage()
 end
 
 local function afficher()
-  etat.heure = textutils.formatTime(os.time(), true)
-  etat.prochaine_mesure = math.max(0, math.ceil(echeance_mesure - os.clock()))
-  etat.erreurs = rassembler_erreurs()
+  ecran.heure = textutils.formatTime(os.time(), true)
+  ecran.prochaine_mesure = math.max(0, math.ceil(echeance_mesure - os.clock()))
+  ecran.erreurs = rassembler_erreurs()
   journaliser_erreurs()
   local cible = cible_affichage()
   theme.appliquer(cible, reglages.theme)
-  local ok, message = pcall(vues.dessiner, cible, etat)
+  local ok, message = pcall(vues.dessiner, cible, ecran)
   if not ok then trace.erreur("Affichage : " .. tostring(message)) end
 end
 
@@ -128,14 +165,18 @@ end
 
 local REDESSINER = { [EVENEMENT_AFFICHAGE] = true, monitor_resize = true, term_resize = true }
 
--- Applique l'action touchée ; le Reset vide la série et le départ de l'objet.
+-- Applique l'action touchée ; onglet, fenêtre, sens et Reset refont le classement.
 local function appliquer(choix)
-  if choix.type == "unite" then etat.unite = choix.unite end
-  if choix.type == "selection" then etat.selection = choix.objet end
-  if choix.type == "pagination" then etat.pagination[choix.liste] = choix.page end
+  if choix.type == "unite" then ecran.unite = choix.unite end
+  if choix.type == "selection" then ecran.selection = choix.cle end
+  if choix.type == "pagination" then ecran.pagination[choix.liste] = choix.page end
+  if choix.type == "onglet" or choix.type == "fenetre" or choix.type == "sens" then
+    ecran[choix.type] = choix[choix.type]
+    reclasser()
+  end
   if choix.type == "reset" then
-    etat.series[choix.objet] = nil
-    etat.departs[choix.objet] = nil
+    flux.reinitialiser(etat_flux, choix.cle)
+    reclasser()
   end
 end
 
@@ -143,7 +184,7 @@ local function reagir(evenement, x, y)
   local cible, sur_moniteur = cible_affichage()
   local touche = (evenement == "monitor_touch" and sur_moniteur) or (evenement == "mouse_click" and not sur_moniteur)
   if touche then
-    local choix = vues.action_touchee(cible, etat, x, y)
+    local choix = vues.action_touchee(cible, ecran, x, y)
     if choix then appliquer(choix) end
     afficher()
   elseif REDESSINER[evenement] then

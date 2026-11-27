@@ -1,10 +1,19 @@
--- Écrans de l'aperçu de la production : chaque gabarit, puis les états particuliers, sur le vrai `vues.dessiner`.
+-- Écrans de l'aperçu de la production : chaque vue à chaque taille, puis les états particuliers, sur le vrai `vues.dessiner`.
 
 local theme = require("commun.theme")
 local vues = require("production.vues")
 local exemple = require("outils.apercus.production.exemple")
 
 local ERREURS = { "ME Bridge hors réseau (NOT_CONNECTED)", "Config : objet minecraft:iron_ingot écarté : déjà suivi" }
+
+local TAILLES = { { 164, 81 }, { 100, 38 }, { 72, 26 }, { 51, 19 }, { 26, 12 } }
+
+local VUES = {
+  { "tout", "Tout", { selection = exemple.PIC } },
+  { "suivis", "Suivis", { onglet = "suivis", sens = "bilan", selection = "productivebees:configurable_honeycomb|a3f1c9e2" } },
+  { "alertes", "Alertes", { onglet = "alertes", unite = "h" } },
+  { "production_seule", "Production seule", { consommation = false, unite = "s", fenetre = 3600 } },
+}
 
 local function ecran(nom, titre, largeur, hauteur, options)
   return {
@@ -16,18 +25,23 @@ local function ecran(nom, titre, largeur, hauteur, options)
   }
 end
 
-local CAS = {
-  { "riche_100x38", "Riche (100x38)", 100, 38, {} },
-  { "riche_72x26", "Riche, plus petit (72x26)", 72, 26, { unite = "h", selection = "minecraft:copper_ingot" } },
-  { "riche_164x81", "Très grand moniteur (164x81)", 164, 81, { unite = "s" } },
-  { "compact_51x19", "Compact, terminal (51x19)", 51, 19, {} },
-  { "compact_26x12", "Compact, petit (26x12)", 26, 12, {} },
-  { "erreurs", "Erreurs en bandeau", 100, 38, { erreurs = ERREURS } },
-  { "pagination", "Objets paginés", 100, 38, { objets_en_plus = 30 } },
-  { "pagination_compact", "Objets paginés, compact", 51, 19, { objets_en_plus = 6, pagination = { objets = 2 } } },
-  { "aucun_objet", "Aucun objet suivi", 100, 38, { vide = true } },
-}
-
 local ecrans = {}
+for _, vue in ipairs(VUES) do
+  for _, taille in ipairs(TAILLES) do
+    local l, h = taille[1], taille[2]
+    ecrans[#ecrans + 1] = ecran(vue[1] .. "_" .. l .. "x" .. h, vue[2] .. " (" .. l .. "x" .. h .. ")", l, h, vue[3])
+  end
+end
+
+local CAS = {
+  { "bilan_100x38", "Bilan, trois colonnes", 100, 38, { sens = "bilan" } },
+  { "erreurs", "Erreurs et coupure", 100, 38, { erreurs = { ERREURS[1], ERREURS[2], "Lecture ignorée : réseau AE incomplet" } } },
+  { "pagination_compact", "Liste paginée, compact", 51, 19, { objets_en_plus = 12, pagination = { tout = 2 } } },
+  { "attente", "Avant la première mesure", 100, 38, { phase = "attente" } },
+  { "attente_26x12", "Avant la première mesure, petit", 26, 12, { phase = "attente" } },
+  { "aucun_objet", "Aucun objet suivi", 72, 26, { vide = true } },
+  { "historique_court", "Débits partiels (5 min d'historique)", 100, 38, { duree = 300 } },
+}
 for _, cas in ipairs(CAS) do ecrans[#ecrans + 1] = ecran(cas[1], cas[2], cas[3], cas[4], cas[5]) end
+
 return ecrans

@@ -17,11 +17,11 @@ Noms d'énumération = `name()` Java.
 |---|---|---|
 | `name` | string | id registre, ex. `minecraft:oak_log` |
 | `count` | number | ME Bridge : peut valoir 0 |
-| `displayName` | string | |
+| `displayName` | string | ME Bridge : entre crochets, ex. `[Iron Ingot]` (constaté en jeu) |
 | `maxStackSize` | number | |
 | `tags` | `{["c:logs"]=true,...}` | clé = tag, valeur `true` |
 | `components` | table | patch de composants (écarts au défaut) |
-| `nbt` | string | HASH des composants (pas une table). À passer à `nbtHash` d'un filtre |
+| `nbt` | string | MD5 hex du patch de composants, déterministe et stable. ABSENT sans composants. À passer à `nbtHash` d'un filtre |
 | `prototype` | table | composants par défaut, ou `{_error=string}` |
 | `isCraftable` | boolean | ME Bridge seulement (pas de `fingerprint` ni `slot`) |
 
@@ -118,7 +118,7 @@ Types additionnels : `storage_bridge`, `multi_drive`. Hors réseau, toute métho
 | `name` | string | `"minecraft:iron_ingot"` ou `"#c:ingots/iron"` (tag, préfixe `#`) |
 | `components` | string SNBT ou table | composants à tester |
 | `matcher` | string | `"patch"` (défaut), `"exact"`, `"subset"` |
-| `nbtHash` | string | égal au champ `nbt` d'un item retourné |
+| `nbtHash` | string | égal au champ `nbt` d'un item retourné ; `""` cible la variante sans composants |
 | `count` | number | quantité à déplacer ou fabriquer. Défaut 2147483647 (tout) |
 | `fromSlot`, `toSlot` | number | emplacements de l'inventaire externe (-1 = tous) |
 | `type` | string | `"item"`, `"fluid"`, `"chemical"` (méthodes génériques : `isCraftable`, `isCrafting`, `cancelCraftingTasks`, `getPatterns`) |
@@ -143,13 +143,15 @@ Erreurs : `nil, "INVENTORY_NOT_FOUND"` (cible illisible), `nil, "<code filtre>"`
 
 | Méthode | Retour |
 |---|---|
-| `getItem(filtre)` | table item. `nil, "EMPTY_FILTER"` si filtre vide. `nil` seul si absent et non fabricable. `count=0,isCraftable=true` si absent mais fabricable |
-| `getItems([filtre])` | liste de tables item (stockés) |
+| `getItem(filtre)` | table item. `nil, "EMPTY_FILTER"` si filtre vide. `nil` seul si absent et non fabricable. `count=0,isCraftable=true` si absent mais fabricable. PREMIÈRE variante qui correspond (arbitraire avec `name` seul), sans somme |
+| `getItems([filtre])` | liste de tables item (stockés), une entrée par variante (`name` + `nbt`) |
 | `getCraftableItems([filtre])` | liste de tables item fabricables (`count` = stock, peut valoir 0) |
 | `isCraftable(filtre)` | boolean |
 | `isConnected()`, `isOnline()` | boolean |
 | `getPatterns([{input=filtre,output=filtre}])` | liste de motifs. `nil, "NO_FILTER"` si la table n'a ni `input` ni `output` |
 | `getCraftingCPUs()` | liste de CPU |
+
+`getItems` et `getItem` s'exécutent sur le fil serveur (au moins un tick par appel). `getItems` construit `tags`, `prototype`, `components` pour chaque item retenu : quelques Mo de tables par appel sur un gros réseau.
 
 Motif : `{patternType="crafting|processing|smithing|stonecutting|unknown", inputs=liste de {primaryInput,possibleInputs,multiplier,remaining}, outputs=liste de tables item, primaryOutput=table item}`.
 CPU : `{storage,coProcessors,isBusy,name,selectionMode}` + `craftingJob` (table tâche) si occupé. `name` = `"Unnamed"` si sans nom.
@@ -179,6 +181,10 @@ if not t then error(err) end
 repeat local _, isErr, id, status = os.pullEvent("ae_crafting")
 until id == t.getId() and (isErr or status == "JOB_DONE")
 ```
+
+## Inventaire générique CC
+
+`list()` : `{ [emplacement] = { name, count, nbt? } }` ; `nbt` suit le même algorithme que le champ `nbt` du ME Bridge (comparables). `getItemDetail(emplacement)` : `displayName` sans crochets.
 
 ## Événements
 
