@@ -4,12 +4,13 @@ local verif = require("verif")
 colors = require("faux.couleurs")
 local systeme = require("faux.systeme")
 local pont_me = require("faux.pont_me")
+local coffre = require("faux.coffre")
 local faux_moniteur = require("faux.moniteur")
 local vers_cc = require("commun.texte").vers_cc
 
 local depaqueter = table.unpack or unpack
 
-local TYPES = { pont_0 = "me_bridge", monitor_0 = "monitor" }
+local TYPES = { pont_0 = "me_bridge", monitor_0 = "monitor", chest_0 = "minecraft:chest" }
 local FER = "minecraft:iron_ingot"
 
 -- Monde par défaut : un pont avec 100 lingots de fer (nom AE « Iron Ingot »), un moniteur, un objet suivi.
@@ -177,5 +178,84 @@ return {
     end)
     present(m, "modem en panne")
     verif.vrai(m.disque.disque["production.log"]:find("modem en panne", 1, true))
+  end,
+
+  un_item_ajoute_au_coffre_modele_est_suivi_sans_redemarrer = function()
+    local m = monde({ periode = 2, coffre = "chest_0", objets = { { objet = FER, nom = "" } } })
+    local c = coffre.nouveau(coffre.reseau(), "chest_0", 27)
+    m.presents.chest_0 = c
+    m.etat_pont.stock["minecraft:gold_ingot"] = 55
+    m.etat_pont.noms["minecraft:gold_ingot"] = "Gold Ingot"
+    lancer(m, 4, function(tour)
+      if tour == 2 then c.emplacements[3] = { name = "minecraft:gold_ingot", count = 1 } end
+      return { "production_affichage" }
+    end)
+    present(m, "Iron Ingot")
+    present(m, "Gold Ingot")
+  end,
+
+  un_item_retire_du_coffre_modele_disparait_et_la_selection_retombe_sur_le_premier = function()
+    local m = monde({ periode = 2, coffre = "chest_0", objets = { { objet = FER, nom = "" } } })
+    local c = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [1] = { name = "minecraft:gold_ingot", count = 1 } })
+    m.presents.chest_0 = c
+    m.etat_pont.stock["minecraft:gold_ingot"] = 55
+    m.etat_pont.noms["minecraft:gold_ingot"] = "Gold Ingot"
+    lancer(m, 6, function(tour)
+      if tour == 2 then return toucher(m, "Gold Ingot") end
+      if tour == 4 then c.emplacements[1] = nil end
+      return { "production_affichage" }
+    end)
+    verif.egal(ecran(m).chercher("Gold Ingot"), nil)
+    local _, y = ecran(m).chercher("Reset")
+    verif.vrai(ecran(m).ligne(y):find("Iron Ingot", 1, true), ecran(m).ligne(y))
+  end,
+
+  un_item_retire_du_coffre_modele_est_oublie_et_repart_de_zero_quand_il_revient = function()
+    local m = monde({ periode = 2, coffre = "chest_0", objets = {} })
+    local c = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [1] = { name = FER, count = 1 } })
+    m.presents.chest_0 = c
+    lancer(m, 8, function(tour)
+      m.etat_pont.stock[FER] = 100 + 10 * tour
+      if tour == 3 then c.emplacements[1] = nil end
+      if tour == 6 then c.emplacements[1] = { name = FER, count = 1 } end
+      return { "production_affichage" }
+    end)
+    local _, y = ecran(m).chercher(vers_cc("Depuis le début"))
+    verif.vrai(ecran(m).ligne(y):find("+20 en 4 s", 1, true), ecran(m).ligne(y))
+  end,
+
+  un_coffre_modele_absent_s_affiche_se_journalise_et_la_config_reste_suivie = function()
+    local m = monde({ periode = 2, coffre = "chest_9", objets = { { objet = FER, nom = "" } } })
+    lancer(m, 4)
+    present(m, "Coffre modèle absent : chest_9")
+    present(m, "Iron Ingot")
+    local _, nombre = m.disque.disque["production.log"]:gsub("Coffre modèle absent", "")
+    verif.egal(nombre, 1)
+  end,
+
+  un_coffre_modele_en_panne_s_affiche_et_garde_son_dernier_contenu_et_son_historique = function()
+    local m = monde({ periode = 2, coffre = "chest_0", objets = { { objet = FER, nom = "" } } })
+    local c = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [1] = { name = "minecraft:gold_ingot", count = 1 } })
+    m.presents.chest_0 = c
+    m.etat_pont.noms["minecraft:gold_ingot"] = "Gold Ingot"
+    lancer(m, 8, function(tour)
+      m.etat_pont.stock["minecraft:gold_ingot"] = 100 + 10 * tour
+      if tour == 2 then return toucher(m, "Gold Ingot") end
+      if tour == 4 then c.panne = "coffre débranché" end
+      if tour == 6 then c.panne = nil end
+      return { "production_affichage" }
+    end)
+    present(m, "Iron Ingot")
+    present(m, "Gold Ingot")
+    verif.vrai(m.disque.disque["production.log"]:find("coffre débranché", 1, true))
+    local _, y = ecran(m).chercher(vers_cc("Depuis le début"))
+    verif.vrai(ecran(m).ligne(y):find("+80 en 16 s", 1, true), ecran(m).ligne(y))
+  end,
+
+  sans_coffre_configure_le_premier_inventaire_du_reseau_n_est_pas_pris = function()
+    local m = monde({ periode = 2, objets = { { objet = FER, nom = "" } } })
+    m.presents.chest_0 = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [1] = { name = "minecraft:gold_ingot", count = 1 } })
+    lancer(m, 3)
+    verif.egal(ecran(m).chercher("gold_ingot"), nil)
   end,
 }

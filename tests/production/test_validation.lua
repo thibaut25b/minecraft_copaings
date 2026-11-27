@@ -25,6 +25,7 @@ return {
     verif.egal(erreurs, {})
     verif.egal(propre.periode, 2)
     verif.egal(propre.unite, "min")
+    verif.egal(propre.coffre, "")
     verif.egal(propre.objets, {})
   end,
 
@@ -52,7 +53,7 @@ return {
 
   valeurs_hors_bornes_retombent_sur_les_defauts = function()
     local propre, erreurs = avec({ periode = 0, echelle_texte = 9, theme = "rose", unite = "jour",
-      duree_historique = -5, duree_graphe = "long", pont = 3, objets = "pas une liste" })
+      duree_historique = -5, duree_graphe = "long", pont = 3, coffre = 4, objets = "pas une liste" })
     verif.egal(propre.periode, 2)
     verif.egal(propre.echelle_texte, 0.5)
     verif.egal(propre.theme, "nuit")
@@ -60,8 +61,9 @@ return {
     verif.egal(propre.duree_historique, 3600)
     verif.egal(propre.duree_graphe, 600)
     verif.egal(propre.pont, "")
+    verif.egal(propre.coffre, "")
     verif.egal(propre.objets, {})
-    verif.egal(#erreurs, 8)
+    verif.egal(#erreurs, 9)
   end,
 
   un_nombre_nan_est_refuse = function()

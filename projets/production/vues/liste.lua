@@ -14,6 +14,14 @@ local liste = {}
 local CLE = "objets"
 local LARGEUR_NOM_MINI = 14
 
+--- Message d'une liste vide : les deux façons de choisir les objets suivis, une ligne par élément.
+liste.MESSAGE_VIDE = {
+  "Aucun objet suivi.",
+  "Coffre modèle : réglage coffre,",
+  "un exemplaire de chaque item dedans.",
+  "Ou objets dans /production.cfg.",
+}
+
 --- Géométrie de la liste dans `zone` : { zone, decoupe, commande, zones }. Une ligne touchée choisit son objet.
 function liste.disposer(zone, etat)
   local demandee = type(etat.pagination) == "table" and etat.pagination[CLE] or nil
@@ -52,7 +60,10 @@ end
 function liste.dessiner(cible, plan, etat, choisi, fond)
   local zone, decoupe = plan.zone, plan.decoupe
   if #etat.objets == 0 then
-    dessin.ecrire(cible, zone.x, zone.y, dessin.tronquer("Aucun objet suivi", zone.largeur), R.discret, fond)
+    for i = 1, math.min(#liste.MESSAGE_VIDE, zone.hauteur) do
+      dessin.ecrire(cible, zone.x, zone.y + i - 1, dessin.tronquer(liste.MESSAGE_VIDE[i], zone.largeur), R.discret,
+        fond)
+    end
     return
   end
   local lignes, largeur_stock, largeur_debit = colonnes(etat, etat.unite)

@@ -39,7 +39,7 @@ local function valider_objet(entree, vus)
 end
 
 --- Réglages validés à partir de `reglages` (fichier complété) et `defauts` : { periode, echelle_texte, theme,
---- unite, duree_historique, duree_graphe, pont, objets }, puis la liste des messages d'erreur. `objets` ne garde
+--- unite, duree_historique, duree_graphe, pont, coffre, objets }, puis la liste des messages d'erreur. `objets` ne garde
 --- que les entrées { objet, nom } valides, sans doublon ; `duree_graphe` est ramenée à `duree_historique` si elle
 --- la dépasse.
 function validation.valider(reglages, defauts)
@@ -67,6 +67,7 @@ function validation.valider(reglages, defauts)
     propre.duree_graphe = propre.duree_historique
   end
   propre.pont = simple(reglages, defauts, "pont", function(v) return type(v) == "string" end, "un texte", erreurs)
+  propre.coffre = simple(reglages, defauts, "coffre", function(v) return type(v) == "string" end, "un texte", erreurs)
 
   propre.objets = {}
   local liste = reglages.objets

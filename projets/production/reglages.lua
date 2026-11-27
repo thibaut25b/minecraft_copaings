@@ -8,7 +8,8 @@ return {
   duree_historique = 3600,   -- secondes de mesures gardées en mémoire
   duree_graphe = 600,        -- secondes couvertes par l'histogramme (au plus duree_historique)
   pont = "",                 -- nom réseau du ME Bridge ("" : le premier trouvé)
-  -- Objets suivis : { objet = "minecraft:iron_ingot", nom = "" }.
+  coffre = "",               -- côté ou nom réseau du coffre modèle ("" : pas de coffre ; jamais deviné)
+  -- Objets suivis, avant ceux du coffre modèle : { objet = "minecraft:iron_ingot", nom = "" }.
   -- nom = "" : le nom affiché lu dans l'AE, à défaut l'identifiant de l'objet.
   objets = {},
 }

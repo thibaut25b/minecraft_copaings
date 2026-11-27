@@ -14,25 +14,33 @@ Débit des items d'un réseau AE2 en /s, /min et /h sur un moniteur tactile : li
 wget run https://raw.githubusercontent.com/thibaut25b/minecraft_copaings/main/install.lua production
 ```
 
-Puis lance `/production/diag` : il liste les périphériques, l'état du pont et les stocks configurés.
+Puis lance `/production/diag` : il liste les périphériques, l'état du pont, le contenu du
+coffre modèle et les stocks suivis.
 `/production/diag iron` cherche dans l'AE les items dont l'id ou le nom contient « iron » : c'est l'id à mettre en config.
 Le détail est écrit dans `/production-diag.txt`.
 
 ## Réglages
 
-Dans `/production.cfg`, décrits dans `projets/production/reglages.lua` :
+Dans `/production.cfg`, décrits dans `projets/production/reglages.lua`.
+
+Méthode simple, le coffre modèle : pose un coffre relié à l'ordinateur, mets `coffre = "left"` (le côté, ou le nom
+réseau donné par clic droit sur le modem), puis dépose-y un exemplaire de chaque item à suivre. Le coffre est relu à
+chaque mesure : ajouter ou retirer un item met l'écran à jour sans redémarrer. Ne relie pas ce coffre à l'AE, sinon
+ses items comptent dans le stock.
+
+Les objets de la config passent en premier, puis ceux du coffre, sans doublon :
 
 ```lua
 {
+  coffre = "left",
   unite = "min",
-  duree_graphe = 600,
   objets = {
     { objet = "minecraft:iron_ingot", nom = "" },
   },
 }
 ```
 
-`nom = ""` : le nom lu dans l'AE. Redémarre l'ordinateur après un changement.
+`nom = ""` : le nom lu dans l'AE. Redémarre l'ordinateur après un changement de `/production.cfg`.
 
 ## Utilisation
 

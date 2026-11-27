@@ -82,7 +82,7 @@ end
 
 -- Hauteurs de la liste, du détail et de l'histogramme (0 : omis) pour `reste` rangées et `total` objets.
 local function repartir_compact(reste, total)
-  if total == 0 then return math.min(1, reste), 0, 0 end
+  if total == 0 then return math.min(#liste.MESSAGE_VIDE, reste), 0, 0 end
   local haut_liste = math.min(total, math.max(2, math.floor(reste * 0.35)))
   local haut_detail = math.min(HAUTEUR_DETAIL_COMPACT, reste - haut_liste)
   if haut_detail < HAUTEUR_COMPACT_MINI then
