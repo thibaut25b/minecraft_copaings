@@ -19,6 +19,7 @@ const COLLECTIONS = [
   { nom: 'casino', titre: 'Casino de démonstration', liste: 'outils/apercus/casino/ecrans.lua', dossier: '', png: 'casino' },
   { nom: 'boutique', titre: 'Tableau de bord de la boutique', liste: 'outils/apercus/boutique/ecrans.lua', dossier: '', png: 'boutique' },
   { nom: 'usine', titre: 'Usine Create', liste: 'outils/apercus/usine/ecrans.lua', dossier: '', png: 'usine' },
+  { nom: 'production', titre: 'Production AE2', liste: 'outils/apercus/production/ecrans.lua', dossier: '', png: 'production' },
 ];
 
 

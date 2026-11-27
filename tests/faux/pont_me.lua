@@ -8,11 +8,12 @@ local pont_me = {}
 -- `exceptions` (méthode -> message levé, ou fonction des arguments qui renvoie le message ou nil),
 -- `taches` (tâches lancées, champ `etat` : "calcul", "en_cours", "fini", "annule", "erreur", "echec_calcul" ;
 -- champ `debug` : texte de `getDebugMessage`),
+-- `noms` (nom -> displayName, défaut : le nom lui-même),
 -- `objets_illisibles` (craftItem renvoie un objet tâche sans méthodes). Il lit `appels` et `livre` (nom -> quantité).
 function pont_me.creer()
   local etat = {
     stock = {}, fabricables = {}, capacite = nil, cibles = nil, connecte = true, codes = {}, exceptions = {},
-    taches = {}, objets_illisibles = false, appels = {}, livre = {},
+    taches = {}, noms = {}, objets_illisibles = false, appels = {}, livre = {},
   }
   local pont = {}
 
@@ -30,7 +31,7 @@ function pont_me.creer()
 
   local function item(nom)
     return {
-      name = nom, count = etat.stock[nom] or 0, displayName = nom, maxStackSize = 64, tags = {},
+      name = nom, count = etat.stock[nom] or 0, displayName = etat.noms[nom] or nom, maxStackSize = 64, tags = {},
       components = {}, nbt = "", isCraftable = etat.fabricables[nom] == true,
     }
   end

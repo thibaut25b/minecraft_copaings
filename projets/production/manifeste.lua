@@ -1,0 +1,30 @@
+-- Manifeste d'installation de la production : `depot` = chemin dans le dépôt, `ordinateur` = chemin sans « / » initial.
+
+return {
+  nom = "production",
+  entree = "production/principal.lua",
+  config = "production.cfg",
+  fichiers = {
+    { depot = "commun/texte.lua", ordinateur = "commun/texte.lua" },
+    { depot = "commun/dessin.lua", ordinateur = "commun/dessin.lua" },
+    { depot = "commun/pixels.lua", ordinateur = "commun/pixels.lua" },
+    { depot = "commun/graphes.lua", ordinateur = "commun/graphes.lua" },
+    { depot = "commun/theme.lua", ordinateur = "commun/theme.lua" },
+    { depot = "commun/panneaux.lua", ordinateur = "commun/panneaux.lua" },
+    { depot = "commun/pagination.lua", ordinateur = "commun/pagination.lua" },
+    { depot = "commun/config.lua", ordinateur = "commun/config.lua" },
+    { depot = "commun/journal.lua", ordinateur = "commun/journal.lua" },
+    { depot = "commun/peripheriques.lua", ordinateur = "commun/peripheriques.lua" },
+    { depot = "projets/production/reglages.lua", ordinateur = "production/reglages.lua" },
+    { depot = "projets/production/validation.lua", ordinateur = "production/validation.lua" },
+    { depot = "projets/production/debit.lua", ordinateur = "production/debit.lua" },
+    { depot = "projets/production/lecture.lua", ordinateur = "production/lecture.lua" },
+    { depot = "projets/production/vues/base.lua", ordinateur = "production/vues/base.lua" },
+    { depot = "projets/production/vues/liste.lua", ordinateur = "production/vues/liste.lua" },
+    { depot = "projets/production/vues/detail.lua", ordinateur = "production/vues/detail.lua" },
+    { depot = "projets/production/vues/histogramme.lua", ordinateur = "production/vues/histogramme.lua" },
+    { depot = "projets/production/vues.lua", ordinateur = "production/vues.lua" },
+    { depot = "projets/production/diag.lua", ordinateur = "production/diag.lua" },
+    { depot = "projets/production/principal.lua", ordinateur = "production/principal.lua" },
+  },
+}
