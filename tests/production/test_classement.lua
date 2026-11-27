@@ -17,6 +17,9 @@ local function etat_de(objets, noms)
   return etat
 end
 
+-- Instructions Lua permises à une mesure suivie de son classement (5000 types) : quelques dixièmes de seconde
+-- pour la VM de CC, qui coupe un programme après 7 s sans pause.
+local BUDGET_INSTRUCTIONS = 5000000
 local REGLAGES = { consommation = true, exclure = {}, debit_mini = 0, delai_alerte = 3600 }
 
 local function avec(modifs)
@@ -112,13 +115,25 @@ return {
     verif.egal(resultat.lignes[1].nom, "a:b")
   end,
 
-  la_pause_est_appelee_par_lots = function()
-    local objets = {}
-    for i = 1, 2001 do objets["a:" .. i .. "|"] = { 0, i } end
-    local pauses = 0
-    classement.classer(etat_de(objets), 60, { fenetre = 60, sens = "prod", pause = function() pauses = pauses + 1 end },
-      avec())
-    verif.egal(pauses, 2)
+  -- Mesure et classement se font d'un bloc, sans rendre la main : leur coût doit rester loin de la limite de CC.
+  mesurer_et_classer_5000_types_dont_1000_actifs_tient_dans_un_budget_court = function()
+    local reglages = { seuil_coupure = 0.2, delai_aller_retour = 30 }
+    local function instantane(t)
+      local liste = {}
+      for i = 1, 5000 do liste["a:" .. i .. "|"] = i <= 1000 and 1000 + (i % 7) * t - (t % 30 == 0 and 50 or 0) or i end
+      return liste
+    end
+    local etat = flux.nouveau()
+    for t = 0, 590, 10 do flux.noter(etat, instantane(t), t, reglages) end
+    local suivant = instantane(600)
+    local instructions = 0
+    debug.sethook(function() instructions = instructions + 1000 end, "", 1000)
+    flux.noter(etat, suivant, 600, reglages)
+    local resultat = classement.ecran(etat, 600, { fenetre = 600, sens = "prod", onglet = "tout", suivis = {},
+      tout = true }, avec())
+    debug.sethook()
+    verif.vrai(resultat.totaux.actifs == 1000, "actifs : " .. resultat.totaux.actifs)
+    verif.vrai(instructions < BUDGET_INSTRUCTIONS, "instructions : " .. instructions)
   end,
 
   l_onglet_suivis_ne_garde_que_la_liste_mais_totaux_et_alertes_couvrent_tout_le_reseau = function()

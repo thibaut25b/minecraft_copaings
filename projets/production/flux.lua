@@ -23,14 +23,20 @@ flux.FINES = { nom = "fines", largeur = 10, nombre = 60 }
 flux.LARGES = { nom = "larges", largeur = 60, nombre = 60 }
 local GRILLES = { flux.FINES, flux.LARGES }
 
---- Une hausse rembourse les baisses en attente quand son débit dépasse ce multiple du rythme habituel.
-flux.SEUIL_HAUSSE = 3
+--- Une hausse ou une baisse est anormale au-delà de ce multiple de son rythme habituel.
+flux.SEUIL_ANORMAL = 3
 
---- Constante de temps (secondes) de la moyenne glissante exponentielle des hausses par seconde.
-flux.CONSTANTE_RYTHME = 120
+--- Poids d'une mesure dans les rythmes habituels (moyennes exponentielles par mesure, en items/s).
+flux.POIDS_RYTHME = 0.2
 
---- Nombre d'objets traités par `noter` entre deux appels de `pause`.
-flux.LOT = 1000
+--- Mesures d'historique sous lesquelles un objet n'annule aucun aller-retour.
+flux.HISTORIQUE_MINI = 6
+
+--- Écart relatif toléré entre l'excédent d'une hausse et la baisse qu'elle rembourse.
+flux.TOLERANCE_RETOUR = 0.2
+
+--- Lectures en coupure d'affilée au bout desquelles l'instantané devient le nouvel état du réseau.
+flux.COUPURES_ACCEPTEES = 6
 
 --- Convertit un débit en items/s vers l'unité `unite` ("s", "min" ou "h"). Unité inconnue : erreur.
 function flux.convertir(debit_par_seconde, unite)
@@ -39,9 +45,9 @@ function flux.convertir(debit_par_seconde, unite)
   return debit_par_seconde * facteur
 end
 
---- État vide : { objets = { [cle] = objet }, base, reference, debut, instant } (voir `noter`).
+--- État vide : { objets = { [cle] = objet }, base, reference, coupures, debut, instant } (voir `noter`).
 function flux.nouveau()
-  return { objets = {}, base = nil, reference = nil, debut = nil, instant = nil }
+  return { objets = {}, base = nil, reference = nil, coupures = 0, debut = nil, instant = nil }
 end
 
 -- Indice de la case qui contient `instant` (une borne appartient à la case qui la précède).
@@ -55,7 +61,8 @@ end
 
 local function creer(etat, cle, debut, depart_t, depart_n)
   local objet = {
-    stock = depart_n, depart = { t = depart_t, n = depart_n }, debut = debut, rythme = nil, attente = {},
+    stock = depart_n, depart = { t = depart_t, n = depart_n }, debut = debut, mesures = 0, hausses = 0, baisses = 0,
+    attente = {},
     fines = grille_vide(), larges = grille_vide(),
   }
   etat.objets[cle] = objet
@@ -109,74 +116,77 @@ local function ranger(objet, t0, t1, champ, quantite, instant)
   end
 end
 
-local function noter_rythme(objet, hausse, duree)
-  if duree <= 0 then return end
-  local par_seconde = hausse / duree
-  if objet.rythme == nil then
-    objet.rythme = par_seconde
-  else
-    local poids = 1 - math.exp(-duree / flux.CONSTANTE_RYTHME)
-    objet.rythme = objet.rythme + (par_seconde - objet.rythme) * poids
-  end
+-- Vrai si `quantite` items en `duree` s dépassent nettement le `rythme` habituel (items/s) ; rythme nul : tout
+-- mouvement non nul est anormal.
+local function anormale(quantite, rythme, duree)
+  return quantite > 0 and quantite > flux.SEUIL_ANORMAL * rythme * duree
 end
 
--- Rembourse jusqu'à `exces` items sur les baisses en attente, de la plus ancienne à la plus récente.
-local function rembourser(attente, exces)
-  local total = 0
-  while exces > 0 and attente[1] do
-    local baisse = attente[1]
-    local part = math.min(baisse.n, exces)
-    baisse.n, exces, total = baisse.n - part, exces - part, total + part
-    if baisse.n <= 0 then table.remove(attente, 1) end
+-- Retire de l'attente et renvoie la baisse que rembourse `exces` : la plus proche en taille, à
+-- `TOLERANCE_RETOUR` près ; nil sinon. Sa part dans le rythme des baisses en est retirée.
+local function apparier(objet, exces)
+  local choisie, ecart_choisi
+  for i, baisse in ipairs(objet.attente) do
+    local ecart = math.abs(exces - baisse.n)
+    if ecart <= flux.TOLERANCE_RETOUR * baisse.n and (ecart_choisi == nil or ecart < ecart_choisi) then
+      choisie, ecart_choisi = i, ecart
+    end
   end
-  return total
+  if not choisie then return nil end
+  local baisse = table.remove(objet.attente, choisie)
+  objet.baisses = math.max(0, objet.baisses - baisse.part)
+  return baisse
 end
 
--- Applique au `objet` la nouvelle quantité `quantite` mesurée à `t1` (mesure précédente à `t0`).
+-- Applique au `objet` la nouvelle quantité `quantite` mesurée à `t1` (mesure précédente à `t0`, `t1 > t0`). Une
+-- baisse anormale attend `delai` s d'être remboursée par une hausse anormale d'excédent voisin ; sinon elle devient
+-- une consommation datée de la baisse. Une part annulée n'entre dans aucun rythme.
 local function evoluer(objet, quantite, t0, t1, delai)
   local variation, duree = quantite - objet.stock, t1 - t0
   objet.stock = quantite
-  local hausse = 0
+  local annulable = delai > 0 and objet.mesures >= flux.HISTORIQUE_MINI
+  local hausse, baisse, en_attente = 0, 0, false
   if variation > 0 then
-    local rembourse = 0
-    local habituel = (objet.rythme or 0) * duree
-    if delai > 0 and objet.attente[1] and variation > flux.SEUIL_HAUSSE * habituel then
-      rembourse = rembourser(objet.attente, variation - habituel)
+    local rendue = nil
+    if annulable and anormale(variation, objet.hausses, duree) then
+      rendue = apparier(objet, variation - objet.hausses * duree)
     end
-    hausse = variation - rembourse
-    if hausse > 0 then ranger(objet, t0, t1, "production", hausse, t1) end
+    local reste = variation - (rendue and rendue.n or 0)
+    if reste > 0 then
+      hausse = reste
+      ranger(objet, t0, t1, "production", reste, t1)
+    elseif reste < 0 then
+      ranger(objet, t0, t1, "consommation", -reste, t1)
+    end
   elseif variation < 0 then
-    if delai > 0 then
-      objet.attente[#objet.attente + 1] = { t0 = t0, t1 = t1, n = -variation }
-    else
-      ranger(objet, t0, t1, "consommation", -variation, t1)
-    end
+    baisse = -variation
+    en_attente = annulable and anormale(baisse, objet.baisses, duree)
+    if not en_attente then ranger(objet, t0, t1, "consommation", baisse, t1) end
   end
-  noter_rythme(objet, hausse, duree)
+  local poids = math.max(1 / (objet.mesures + 1), flux.POIDS_RYTHME)
+  objet.hausses = objet.hausses + (hausse / duree - objet.hausses) * poids
+  objet.baisses = objet.baisses + (baisse / duree - objet.baisses) * poids
+  for _, autre in ipairs(objet.attente) do autre.part = autre.part * (1 - poids) end
+  if en_attente then
+    objet.attente[#objet.attente + 1] = { t0 = t0, t1 = t1, n = baisse, part = poids * baisse / duree }
+  end
+  objet.mesures = objet.mesures + 1
   while objet.attente[1] and t1 - objet.attente[1].t1 >= delai do
-    local baisse = table.remove(objet.attente, 1)
-    ranger(objet, baisse.t0, baisse.t1, "consommation", baisse.n, t1)
+    local expiree = table.remove(objet.attente, 1)
+    ranger(objet, expiree.t0, expiree.t1, "consommation", expiree.n, t1)
   end
   for _, spec in ipairs(GRILLES) do purger(objet[spec.nom], premiere_gardee(spec, t1)) end
 end
 
-local function compteur(pause)
-  local compte = 0
-  return function()
-    compte = compte + 1
-    if pause and compte % flux.LOT == 0 then pause() end
-  end
-end
-
--- Instantané pris comme base : stocks recalés sans variation (le départ suit le saut), absents à 0.
-local function prendre_base(etat, instantane, instant, compter)
+-- Instantané pris comme base : stocks recalés sans variation (le départ suit le saut), absents à 0, baisses en
+-- attente abandonnées.
+local function prendre_base(etat, instantane, instant)
   local premier = etat.debut == nil
   for cle, quantite in pairs(instantane) do
-    compter()
     local objet = etat.objets[cle]
     if objet then
       objet.depart.n = objet.depart.n + quantite - objet.stock
-      objet.stock = quantite
+      objet.stock, objet.attente = quantite, {}
     else
       creer(etat, cle, instant, instant, quantite)
     end
@@ -184,42 +194,39 @@ local function prendre_base(etat, instantane, instant, compter)
   if not premier then
     for cle, objet in pairs(etat.objets) do
       if instantane[cle] == nil then
-        compter()
         objet.depart.n = objet.depart.n - objet.stock
-        objet.stock = 0
+        objet.stock, objet.attente = 0, {}
       end
     end
   end
   etat.debut = etat.debut or instant
+  etat.base, etat.instant = instantane, instant
 end
 
 --- Note l'instantané `instantane` ({ [cle] = quantité }, lecture réussie) mesuré à `instant` (secondes), avec
---- `reglages` { seuil_coupure, delai_aller_retour }. `pause` (optionnelle) est appelée tous les `flux.LOT` objets.
---- Renvoie "base" (premier instantané, ou celui qui suit une coupure ou `rebaser` : aucun débit), "coupure"
---- (rien n'est noté, la base sera recalée) ou "mesure". Une clé absente vaut 0 ; un objet à 0 sans case ni
+--- `reglages` { seuil_coupure, delai_aller_retour }. Renvoie "coupure" (rien n'est noté : la dernière lecture
+--- valide reste la référence et la base), "base" (aucun débit : premier instantané, après `rebaser`, horloge qui
+--- recule ou n'avance pas, ou `COUPURES_ACCEPTEES` coupures d'affilée prises comme nouvel état du réseau) ou
+--- "mesure" (variations depuis la dernière lecture valide). Une clé absente vaut 0 ; un objet à 0 sans case ni
 --- baisse en attente est retiré.
-function flux.noter(etat, instantane, instant, reglages, pause)
-  local compter = compteur(pause)
-  local coupure = inventaire.coupure(etat.reference, instantane, reglages.seuil_coupure)
-  if not inventaire.vide(instantane) then etat.reference = instantane end
-  if coupure then
+function flux.noter(etat, instantane, instant, reglages)
+  if inventaire.coupure(etat.reference, instantane, reglages.seuil_coupure) then
+    etat.coupures = etat.coupures + 1
+    if etat.coupures < flux.COUPURES_ACCEPTEES then return "coupure" end
     etat.base = nil
-    return "coupure"
   end
-  if etat.base == nil then
-    prendre_base(etat, instantane, instant, compter)
-    etat.base, etat.instant = instantane, instant
+  etat.coupures, etat.reference = 0, instantane
+  if etat.base == nil or instant <= etat.instant then
+    prendre_base(etat, instantane, instant)
     return "base"
   end
   local t0, delai = etat.instant, reglages.delai_aller_retour
   for cle, quantite in pairs(instantane) do
-    compter()
     local objet = etat.objets[cle] or creer(etat, cle, etat.debut, t0, 0)
     evoluer(objet, quantite, t0, instant, delai)
   end
   for cle, objet in pairs(etat.objets) do
     if instantane[cle] == nil then
-      compter()
       evoluer(objet, 0, t0, instant, delai)
       if objet.fines.nombre == 0 and objet.larges.nombre == 0 and not objet.attente[1] then
         etat.objets[cle] = nil
@@ -230,9 +237,10 @@ function flux.noter(etat, instantane, instant, reglages, pause)
   return "mesure"
 end
 
---- Le prochain instantané noté servira de base (sans débit) : à appeler quand l'ensemble des ids lus change.
+--- Le prochain instantané noté servira de base (sans débit ni détection de coupure) : à appeler quand l'ensemble
+--- des ids lus change.
 function flux.rebaser(etat)
-  etat.base = nil
+  etat.base, etat.reference = nil, nil
 end
 
 --- Donne aux objets connus les noms de `noms` ({ [cle] = nom affiché }).

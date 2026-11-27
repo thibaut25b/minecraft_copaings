@@ -10,6 +10,7 @@ local vers_cc = require("commun.texte").vers_cc
 
 local depaqueter = table.unpack or unpack
 local classement = require("production.classement")
+local flux = require("production.flux")
 
 local TYPES = { pont_0 = "me_bridge", monitor_0 = "monitor", chest_0 = "minecraft:chest" }
 local FER = "minecraft:iron_ingot"
@@ -201,14 +202,63 @@ return {
     present(m, "Lecture ignorée : réseau AE incomplet")
   end,
 
-  des_milliers_de_types_rendent_la_main_pendant_le_traitement = function()
+  la_mesure_se_fait_d_un_bloc_rend_la_main_par_sleep_et_aucun_evenement_filtre_n_est_attendu = function()
     local m = monde({ periode = 2, objets = { { objet = FER, nom = "" } } })
     for i = 1, 2500 do m.etat_pont.stock["a:objet_" .. i] = i end
-    local pauses = 0
-    lancer(m, 6, nil, function()
-      os.queueEvent = function(nom) if nom == "production_pause" then pauses = pauses + 1 end end
+    local filtres, sommeils = {}, 0
+    lancer(m, 6, function(tour)
+      if tour == 4 then return toucher(m, "1 h") end
+      return { "production_affichage" }
+    end, function()
+      os.pullEvent = function(filtre)
+        if filtre ~= nil then filtres[#filtres + 1] = filtre end
+        return coroutine.yield()
+      end
+      local dormir = sleep
+      sleep = function()
+        sommeils = sommeils + 1
+        dormir()
+      end
     end)
-    verif.vrai(pauses >= 2, "pauses : " .. pauses)
+    verif.egal(filtres, {})
+    verif.egal(sommeils, #pont_me.appels_de(m.etat_pont, "getItems"))
+  end,
+
+  reordonner_le_coffre_modele_ne_refait_pas_de_base = function()
+    local m = monde({ periode = 2, tout = false, coffre = "chest_0", objets = { { objet = FER, nom = "" } } })
+    local c = coffre.nouveau(coffre.reseau(), "chest_0", 27, { [1] = { name = "minecraft:gold_ingot", count = 1 },
+      [2] = { name = "minecraft:copper_ingot", count = 1 } })
+    m.presents.chest_0 = c
+    local rebaser, rebases = flux.rebaser, 0
+    flux.rebaser = function(...)
+      rebases = rebases + 1
+      return rebaser(...)
+    end
+    local ok, erreur = pcall(lancer, m, 5, function(tour)
+      if tour == 3 then c.emplacements[1], c.emplacements[2] = c.emplacements[2], c.emplacements[1] end
+      return { "production_affichage" }
+    end)
+    flux.rebaser = rebaser
+    verif.vrai(ok, tostring(erreur))
+    verif.egal(rebases, 0)
+  end,
+
+  un_ajout_d_ids_prend_une_base_sans_signaler_de_coupure = function()
+    local objets = {}
+    for i = 1, 20 do
+      objets[i] = { objet = "a:objet_" .. i, nom = "" }
+    end
+    local m = monde({ periode = 2, tout = false, coffre = "chest_0", objets = objets })
+    for i = 1, 30 do m.etat_pont.stock["a:objet_" .. i] = 50 end
+    local c = coffre.nouveau(coffre.reseau(), "chest_0", 27)
+    m.presents.chest_0 = c
+    lancer(m, 3, function(tour)
+      if tour == 3 then
+        for i = 21, 30 do c.emplacements[i - 20] = { name = "a:objet_" .. i, count = 1 } end
+      end
+      return { "production_affichage" }
+    end)
+    verif.egal(ecran(m).chercher(vers_cc("réseau AE incomplet")), nil, ecran(m).texte())
   end,
 
   config_fautive_est_signalee_et_le_reste_tourne = function()

@@ -94,6 +94,13 @@ return {
     verif.egal(avec({ periode = 1.9 }).periode, 10)
   end,
 
+  la_periode_maximale_est_de_soixante_secondes = function()
+    verif.egal(avec({ periode = 60 }).periode, 60)
+    local propre, erreurs = avec({ periode = 61 })
+    verif.egal(propre.periode, 10)
+    verif.vrai(erreurs[1]:find("de 2 à 60", 1, true), erreurs[1])
+  end,
+
   un_delai_d_aller_retour_nul_est_accepte = function()
     local propre, erreurs = avec({ delai_aller_retour = 0, fenetre = 3600, sens = "conso", tout = false })
     verif.egal(erreurs, {})

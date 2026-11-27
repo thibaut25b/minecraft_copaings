@@ -6,6 +6,7 @@ local flux = require("production.flux")
 local K = "a:b|"
 local BRUT = { seuil_coupure = 1, delai_aller_retour = 0 }
 local RETOUR = { seuil_coupure = 1, delai_aller_retour = 30 }
+local COUPE = { seuil_coupure = 0.2, delai_aller_retour = 30 }
 
 local function proche(obtenu, attendu, ecart, message)
   verif.vrai(math.abs(obtenu - attendu) <= (ecart or 1e-9),
@@ -29,6 +30,39 @@ local function sept_par_seconde(baisse, retour)
     if t >= 60 and (retour == nil or t < retour) then stock = stock - baisse end
     return stock
   end
+end
+
+-- Instantané de `types` clés « a:1| » à « a:N| », chacune à `quantite`.
+local function reseau(types, quantite)
+  local instantane = {}
+  for i = 1, types do instantane["a:" .. i .. "|"] = quantite end
+  return instantane
+end
+
+-- Production et consommation totales de K sur toutes ses cases d'une minute.
+local function totaux(etat)
+  local production, consommation = 0, 0
+  for _, case in pairs(etat.objets[K].larges.cases) do
+    production, consommation = production + case.production, consommation + case.consommation
+  end
+  return production, consommation
+end
+
+-- Sur 1 h, période 10 s : vérifie qu'avec le délai de 30 s, production et consommation valent à 5 % près les
+-- variations visibles (délai nul), et les renvoie.
+local function sur_une_heure(stock)
+  local p_brut, c_brut = flux.debits(suivre(nil, BRUT, 0, 3600, 10, stock), K, 3600, 3600)
+  local production, consommation = flux.debits(suivre(nil, RETOUR, 0, 3600, 10, stock), K, 3600, 3600)
+  proche(production, p_brut, 0.05 * p_brut, "production avec délai")
+  proche(consommation, c_brut, 0.05 * c_brut, "consommation avec délai")
+  return production, consommation
+end
+
+-- Stock constant à 1000 de 0 à 90 s, puis les valeurs de `suite`, une toutes les 10 s.
+local function apres_un_calme(suite)
+  local etat = suivre(nil, RETOUR, 0, 90, 10, function() return 1000 end)
+  for k, quantite in ipairs(suite) do flux.noter(etat, { [K] = quantite }, 90 + 10 * k, RETOUR) end
+  return etat
 end
 
 return {
@@ -84,7 +118,7 @@ return {
     verif.egal({ flux.debits(etat, "c|b", 60, 10) }, { 0, 0.5, -0.5, true })
   end,
 
-  un_aller_retour_rapide_n_est_ni_production_ni_consommation = function()
+  le_cas_vu_en_jeu_7_par_seconde_moins_250_puis_retour_4_s_apres_n_est_que_production = function()
     local etat = suivre(nil, RETOUR, 0, 200, 2, sept_par_seconde(250, 64))
     local production, consommation = flux.debits(etat, K, 60, 120)
     proche(production, 7, 0.5, "production sur 1 min")
@@ -107,6 +141,85 @@ return {
     proche(c_avec, c_brut, 1e-9, "consommation")
     proche(c_avec * 100, 236, 1e-6, "baisse vue entre deux mesures")
     proche(flux.barres(avec, K, 600, 100)[56].consommation, 23.6, 1e-9, "case de la baisse")
+  end,
+
+  -- Récolte de 300 toutes les 30 s, consommation de 5/s : la période qui reçoit la récolte ne voit que +250.
+  une_recolte_par_a_coups_avec_une_consommation_reguliere_n_efface_aucune_consommation = function()
+    local production, consommation = sur_une_heure(function(t) return 10000 - 5 * t + 300 * math.floor(t / 30) end)
+    proche(production, 250 / 30, 0.05 * 250 / 30, "production")
+    proche(consommation, 100 / 30, 0.05 * 100 / 30, "consommation")
+  end,
+
+  -- 10/s livrés par piles de 64, 8/s consommés : chaque période voit +48 (deux piles) ou -16 (une pile).
+  une_production_livree_par_piles_de_64_n_est_pas_absorbee_par_les_remboursements = function()
+    local production, consommation = sur_une_heure(function(t) return 10000 + 64 * math.floor(10 * t / 64) - 8 * t end)
+    proche(production, 2.7, 0.05 * 2.7, "production")
+    proche(consommation, 0.7, 0.05 * 0.7, "consommation")
+  end,
+
+  une_baisse_habituelle_est_comptee_tout_de_suite = function()
+    local etat = suivre(nil, RETOUR, 0, 100, 10, function(t) return 10000 - 5 * t end)
+    verif.egal({ flux.debits(etat, K, 60, 100) }, { 0, 5, -5, false })
+  end,
+
+  un_objet_neuf_n_annule_rien_avant_six_mesures_d_historique = function()
+    local etat = flux.nouveau()
+    flux.noter(etat, { ["a:c|"] = 1 }, 0, RETOUR)
+    flux.noter(etat, { ["a:c|"] = 1, [K] = 1000 }, 10, RETOUR)
+    flux.noter(etat, { ["a:c|"] = 1, [K] = 500 }, 20, RETOUR)
+    flux.noter(etat, { ["a:c|"] = 1, [K] = 1000 }, 30, RETOUR)
+    verif.egal(etat.objets[K].attente, {})
+    verif.egal({ totaux(etat) }, { 1500, 500 })
+  end,
+
+  une_hausse_ne_rembourse_jamais_une_somme_de_baisses = function()
+    local etat = apres_un_calme({ 900, 800, 1000, 1000, 1000 })
+    verif.egal(etat.objets[K].attente, {})
+    verif.egal({ totaux(etat) }, { 200, 200 })
+  end,
+
+  une_hausse_rembourse_une_seule_baisse_la_plus_proche_en_taille = function()
+    local etat = apres_un_calme({ 900, 790, 898, 898, 898 })
+    verif.egal(etat.objets[K].attente, {})
+    verif.egal({ totaux(etat) }, { 0, 102 })
+  end,
+
+  une_hausse_qui_n_est_pas_anormale_ne_rembourse_rien = function()
+    local etat = suivre(nil, RETOUR, 0, 90, 10, function(t) return 1000 + 10 * t end)
+    flux.noter(etat, { [K] = 1800 }, 100, RETOUR)
+    flux.noter(etat, { [K] = 2000 }, 110, RETOUR)
+    verif.egal(#etat.objets[K].attente, 1)
+    suivre(etat, RETOUR, 120, 150, 10, function(t) return 2000 + 10 * (t - 110) end)
+    verif.egal({ totaux(etat) }, { 1500, 100 })
+  end,
+
+  production_moins_consommation_egale_la_variation_de_stock_avec_le_delai_actif = function()
+    local graine, stocks, stock, retour = 12345, {}, 5000, 0
+    local function tirer(n)
+      graine = (graine * 16807) % 2147483647
+      return graine % n
+    end
+    for k = 0, 300 do
+      stock = stock + retour + tirer(100) - tirer(60)
+      retour = 0
+      if k > 10 and tirer(7) == 0 then
+        retour = 200 + tirer(300)
+        stock = stock - retour
+      elseif tirer(11) == 0 then
+        stock = stock - 150 - tirer(200)
+      end
+      stocks[k] = stock
+    end
+    local function serie(t) return stocks[t / 10] end
+    local avec = suivre(nil, RETOUR, 0, 3000, 10, serie)
+    local brut = suivre(nil, BRUT, 0, 3000, 10, serie)
+    local p_avec, c_avec = totaux(avec)
+    local p_brut, c_brut = totaux(brut)
+    local en_attente = 0
+    for _, baisse in ipairs(avec.objets[K].attente) do en_attente = en_attente + baisse.n end
+    proche(p_avec - c_avec, stocks[300] - stocks[0] + en_attente, 1e-6, "conservation")
+    proche(p_brut - p_avec, c_brut - c_avec - en_attente, 1e-6, "remboursements nets nuls")
+    verif.vrai(p_brut - p_avec > 1000, "allers-retours annulés : " .. (p_brut - p_avec))
   end,
 
   un_delai_nul_donne_le_comportement_brut = function()
@@ -182,20 +295,71 @@ return {
     verif.egal(etat.objets[K], nil)
   end,
 
-  une_coupure_ne_note_rien_et_l_instantane_suivant_sert_de_base = function()
-    local plein = {}
-    for i = 1, 20 do plein["a:" .. i .. "|"] = 100 end
+  une_coupure_ne_note_rien_et_la_mesure_valide_suivante_compte_l_intervalle = function()
     local reglages = { seuil_coupure = 0.2, delai_aller_retour = 0 }
     local etat = flux.nouveau()
-    flux.noter(etat, plein, 0, reglages)
+    flux.noter(etat, reseau(20, 100), 0, reglages)
     verif.egal(flux.noter(etat, {}, 10, reglages), "coupure")
     verif.egal(etat.objets["a:1|"].stock, 100)
-    local revenu = {}
-    for cle in pairs(plein) do revenu[cle] = 150 end
-    verif.egal(flux.noter(etat, revenu, 20, reglages), "base")
-    verif.egal({ flux.debits(etat, "a:1|", 60, 20) }, { 0, 0, 0, true })
+    verif.egal(flux.noter(etat, reseau(20, 150), 20, reglages), "mesure")
+    verif.egal({ flux.debits(etat, "a:1|", 60, 20) }, { 2.5, 0, 2.5, true })
+  end,
+
+  une_lecture_partielle_ne_devient_ni_reference_ni_base = function()
+    local reglages = { seuil_coupure = 0.2, delai_aller_retour = 30 }
+    local etat = flux.nouveau()
+    flux.noter(etat, reseau(500, 100), 0, reglages)
+    verif.egal(flux.noter(etat, reseau(5, 100), 10, reglages), "coupure")
+    verif.egal(flux.noter(etat, reseau(5, 100), 20, reglages), "coupure")
+    local revenu = reseau(500, 100)
+    revenu["a:7|"] = 130
     verif.egal(flux.noter(etat, revenu, 30, reglages), "mesure")
-    verif.egal({ flux.depuis_depart(etat, "a:1|") }, { 0, 30 })
+    verif.egal({ flux.debits(etat, "a:7|", 60, 30) }, { 1, 0, 1, true })
+    verif.egal({ flux.debits(etat, "a:300|", 60, 30) }, { 0, 0, 0, true })
+  end,
+
+  une_coupure_qui_dure_six_lectures_devient_la_nouvelle_base_sans_variation = function()
+    local reglages = { seuil_coupure = 0.2, delai_aller_retour = 0 }
+    local etat = flux.nouveau()
+    flux.noter(etat, reseau(500, 100), 0, reglages)
+    for k = 1, 5 do
+      verif.egal(flux.noter(etat, reseau(5, 100), 10 * k, reglages), "coupure", "lecture " .. k)
+    end
+    verif.egal(flux.noter(etat, reseau(5, 100), 60, reglages), "base")
+    verif.egal(etat.objets["a:300|"].stock, 0)
+    verif.egal({ flux.debits(etat, "a:300|", 60, 60) }, { 0, 0, 0, false })
+    verif.egal(flux.noter(etat, reseau(5, 110), 70, reglages), "mesure")
+    proche(flux.debits(etat, "a:1|", 60, 70), 10 / 60, 1e-9, "production après la nouvelle base")
+  end,
+
+  une_nouvelle_base_abandonne_les_baisses_en_attente = function()
+    local etat = suivre(nil, RETOUR, 0, 60, 2, sept_par_seconde(250))
+    verif.egal(#etat.objets[K].attente, 1)
+    flux.rebaser(etat)
+    verif.egal(flux.noter(etat, { [K] = 1000 }, 62, RETOUR), "base")
+    verif.egal(etat.objets[K].attente, {})
+    suivre(etat, RETOUR, 64, 120, 2, function(t) return 1000 + 7 * (t - 62) end)
+    verif.egal(select(2, flux.debits(etat, K, 600, 120)), 0)
+    local coupe, instantane = flux.nouveau(), reseau(25, 10)
+    for t = 0, 60, 2 do
+      instantane[K] = sept_par_seconde(250)(t)
+      flux.noter(coupe, instantane, t, COUPE)
+    end
+    verif.egal(#coupe.objets[K].attente, 1)
+    for k = 1, 6 do flux.noter(coupe, {}, 60 + 2 * k, COUPE) end
+    verif.egal(coupe.objets[K].attente, {})
+    flux.noter(coupe, {}, 200, COUPE)
+    verif.egal(select(2, flux.debits(coupe, K, 600, 200)), 0)
+  end,
+
+  une_horloge_qui_recule_ou_une_duree_nulle_prend_une_base_sans_variation = function()
+    local etat = suivre(nil, BRUT, 0, 20, 10, function(t) return 100 + t end)
+    verif.egal(flux.noter(etat, { [K] = 500 }, 20, BRUT), "base")
+    verif.egal(flux.noter(etat, { [K] = 900 }, 5, BRUT), "base")
+    verif.egal(select(2, flux.debits(etat, K, 60, 20)), 0)
+    proche(flux.debits(etat, K, 60, 20), 1, 1e-9, "production")
+    verif.egal(flux.noter(etat, { [K] = 910 }, 15, BRUT), "mesure")
+    verif.egal({ flux.depuis_depart(etat, K) }, { 30, 15 })
   end,
 
   rebaser_fait_du_prochain_instantane_une_base = function()
@@ -214,21 +378,6 @@ return {
     suivre(etat, BRUT, 110, 120, 10, function(t) return t end)
     verif.egal({ flux.depuis_depart(etat, K) }, { 20, 20 })
     flux.reinitialiser(etat, "inconnu|")
-  end,
-
-  noter_en_lots_avec_pause_donne_le_meme_etat_qu_en_une_fois = function()
-    local function instantane(t)
-      local liste = {}
-      for i = 1, 2500 do liste["a:" .. i .. "|"] = i + t * (i % 3) end
-      return liste
-    end
-    local une_fois, en_lots, pauses = flux.nouveau(), flux.nouveau(), 0
-    for t = 0, 20, 10 do
-      flux.noter(une_fois, instantane(t), t, BRUT)
-      flux.noter(en_lots, instantane(t), t, BRUT, function() pauses = pauses + 1 end)
-    end
-    verif.egal(en_lots, une_fois)
-    verif.egal(pauses, 6)
   end,
 
   les_unites_convertissent_les_debits = function()

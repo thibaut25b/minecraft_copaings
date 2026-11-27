@@ -42,7 +42,7 @@ end
 --- d'une petite liste suivie n'est pas un lecteur déchargé.
 inventaire.TYPES_MINI_COUPURE = 20
 
---- Vrai si `instantane` est une coupure (lecteur déchargé) par rapport à `reference` (instantané précédent, nil
+--- Vrai si `instantane` est une coupure (lecteur déchargé) par rapport à `reference` (dernière lecture valide, nil
 --- s'il n'y en a pas, d'au moins `TYPES_MINI_COUPURE` types) : la part des types disparus, ou celle des types
 --- apparus, ou la chute relative du total dépasse `seuil`. Les parts se rapportent aux types et au total de `reference`.
 function inventaire.coupure(reference, instantane, seuil)

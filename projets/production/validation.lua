@@ -12,6 +12,9 @@ validation.ECHELLE_MINI, validation.ECHELLE_MAXI = 0.5, 5
 --- Plus petite période de mesure acceptée, en secondes.
 validation.PERIODE_MINI = 2
 
+--- Plus longue période de mesure acceptée, en secondes.
+validation.PERIODE_MAXI = 60
+
 --- Plus long délai d'aller-retour accepté : une consommation datée d'avant doit rester dans les cases fines.
 validation.DELAI_ALLER_RETOUR_MAXI = 300
 
@@ -51,7 +54,8 @@ for i, fenetre in ipairs(flux.FENETRES) do fenetres[i] = tostring(fenetre) end
 
 -- Réglages simples : clé, test, description de l'attendu.
 local SIMPLES = {
-  { "periode", entre(validation.PERIODE_MINI), "un nombre de secondes >= " .. validation.PERIODE_MINI },
+  { "periode", entre(validation.PERIODE_MINI, validation.PERIODE_MAXI),
+    "un nombre de secondes de " .. validation.PERIODE_MINI .. " à " .. validation.PERIODE_MAXI },
   { "echelle_texte", entre(validation.ECHELLE_MINI, validation.ECHELLE_MAXI),
     "un nombre de " .. validation.ECHELLE_MINI .. " à " .. validation.ECHELLE_MAXI },
   { "theme", connu(theme.NOMS) },

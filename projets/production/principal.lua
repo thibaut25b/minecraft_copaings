@@ -19,7 +19,6 @@ local CHEMIN_CONFIG = "/production.cfg"
 local CHEMIN_JOURNAL = "/production.log"
 local TAILLE_JOURNAL = 50000
 local EVENEMENT_AFFICHAGE = "production_affichage"
-local EVENEMENT_PAUSE = "production_pause"
 local MESSAGE_COUPURE = "Lecture ignorée : réseau AE incomplet"
 
 local lus, erreur_config = config.charger(CHEMIN_CONFIG, defauts)
@@ -73,12 +72,6 @@ local function proteger(nom, etape, ...)
   for _, texte in pairs(internes) do erreurs.interne[#erreurs.interne + 1] = texte end
 end
 
--- Rend la main à CC au milieu d'un long traitement (des milliers de types), sans perdre d'événement utile.
-local function pause()
-  os.queueEvent(EVENEMENT_PAUSE)
-  os.pullEvent(EVENEMENT_PAUSE)
-end
-
 -- Le pont nommé dans la config, sinon le premier ME Bridge visible.
 local function trouver_pont()
   if reglages.pont ~= "" then return peripheriques.par_nom(reglages.pont) end
@@ -102,15 +95,18 @@ end
 local function reclasser()
   if not ecran.instant then return end
   ecran.classement = classement.ecran(etat_flux, ecran.instant, { fenetre = ecran.fenetre, sens = ecran.sens,
-    onglet = ecran.onglet, suivis = liste_suivie, tout = reglages.tout, pause = pause }, reglages)
+    onglet = ecran.onglet, suivis = liste_suivie, tout = reglages.tout }, reglages)
 end
 
--- Items à noter : tout le réseau en un appel, ou les ids suivis ; un changement d'ids refait une base (le stock
--- d'un id nouveau n'est pas une production).
+-- Items à noter : tout le réseau en un appel, ou les ids suivis ; un changement de l'ensemble des ids (pas de leur
+-- ordre) refait une base (le stock d'un id nouveau n'est pas une production).
 local function lire_items(pont)
   if reglages.tout then return lecture.lire_tout(pont) end
   local ids = suivi.ids(liste_suivie)
-  local signature = table.concat(ids, " ")
+  local tries = {}
+  for i, id in ipairs(ids) do tries[i] = id end
+  table.sort(tries)
+  local signature = table.concat(tries, " ")
   if ids_lus ~= nil and signature ~= ids_lus then flux.rebaser(etat_flux) end
   ids_lus = signature
   return lecture.lire_ids(pont, ids)
@@ -125,7 +121,7 @@ local function mesurer()
     return
   end
   local instantane, noms = inventaire.normaliser(items)
-  local statut = flux.noter(etat_flux, instantane, instant, reglages, pause)
+  local statut = flux.noter(etat_flux, instantane, instant, reglages)
   flux.nommer(etat_flux, noms)
   erreurs.mesures = statut == "coupure" and { MESSAGE_COUPURE } or {}
   if statut == "mesure" then ecran.phase = "suivi" end
@@ -154,6 +150,7 @@ local function afficher()
   if not ok then trace.erreur("Affichage : " .. tostring(message)) end
 end
 
+-- Flux et classement se mettent à jour d'un bloc, sans rendre la main ; la boucle la rend entre deux mesures.
 local function boucle_mesure()
   while true do
     echeance_mesure = os.clock() + reglages.periode

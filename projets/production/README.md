@@ -34,8 +34,10 @@ Dans `/production.cfg`, décrits dans `projets/production/reglages.lua`. Nouveau
 ## Ce que mesure l'écran
 
 - Des variations de stock entre deux mesures : un item produit puis consommé dans la même période est invisible.
-- Une baisse remboursée par un retour dans `delai_aller_retour` secondes (aller-retour) est ignorée.
-- Une lecture où trop de types disparaissent d'un coup est ignorée (réseau incomplet, chunk déchargé).
+- Une baisse inhabituelle suivie, dans `delai_aller_retour` secondes, d'une hausse inhabituelle de même taille
+  (aller-retour) est ignorée.
+- Une lecture où trop de types disparaissent d'un coup est ignorée (réseau incomplet, chunk déchargé) ; 6 de suite
+  deviennent le nouvel état du réseau.
 - `~` devant un débit : historique plus court que la fenêtre. L'historique est perdu au redémarrage.
 
 Sur un très gros réseau, `getItems()` peut coûter au serveur : augmente `periode`. Journal : `/production.log`.

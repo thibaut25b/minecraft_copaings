@@ -1,7 +1,7 @@
 -- Réglages par défaut du suivi de production. Les valeurs du monde se changent dans `/production.cfg`, jamais ici.
 
 return {
-  periode = 10,              -- secondes entre deux mesures (2 au moins)
+  periode = 10,              -- secondes entre deux mesures (2 à 60)
   echelle_texte = 0.5,       -- taille du texte du moniteur (0.5 à 5)
   theme = "nuit",            -- palette du tableau de bord : "nuit" ou "ambre"
   unite = "min",             -- unité de débit affichée au départ : "s", "min" ou "h"

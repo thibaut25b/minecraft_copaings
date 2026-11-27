@@ -62,7 +62,7 @@ local TRIS = {
   bilan = function(ligne) return math.abs(ligne.net) end,
 }
 
---- Classement à `instant` sur `vue` { fenetre, sens, suivis? (liste suivie ; nil = tout l'état), pause? } avec
+--- Classement à `instant` sur `vue` { fenetre, sens, suivis? (liste suivie ; nil = tout l'état) } avec
 --- `reglages` { consommation, exclure, debit_mini (items/min), delai_alerte }. Renvoie { lignes, totaux, alertes } :
 --- lignes { cle, nom, stock, production, consommation, net, partiel } (débits en items/s) triées selon le sens,
 --- départagées par nom ; `debit_mini` s'applique au critère du tri. Sans liste suivie, une ligne immobile dans le
@@ -76,8 +76,7 @@ function classement.classer(etat, instant, vue, reglages)
   local cles, noms_suivis = cles_considerees(etat, vue.suivis)
   local lignes, alertes = {}, {}
   local totaux = { production = 0, consommation = avec_conso and 0 or nil, actifs = 0, connus = 0 }
-  for i, cle in ipairs(cles) do
-    if vue.pause and i % flux.LOT == 0 then vue.pause() end
+  for _, cle in ipairs(cles) do
     if not exclu(cle, reglages.exclure) then
       local objet = etat.objets[cle]
       local production, consommation, net, partiel = flux.debits(etat, cle, vue.fenetre, instant)
@@ -112,16 +111,16 @@ function classement.classer(etat, instant, vue, reglages)
   return { lignes = lignes, totaux = totaux, alertes = alertes }
 end
 
---- Contenu de l'écran à `instant` pour `vue` { fenetre, sens, onglet, suivis (liste suivie), tout, pause? } :
+--- Contenu de l'écran à `instant` pour `vue` { fenetre, sens, onglet, suivis (liste suivie), tout } :
 --- comme `classer`, totaux et alertes sur le périmètre lu (tout l'état si `tout`, sinon la liste suivie), lignes
 --- de l'onglet (la liste suivie seule sur l'onglet "suivis").
 function classement.ecran(etat, instant, vue, reglages)
   local perimetre = not vue.tout and vue.suivis or nil
   local resultat = classement.classer(etat, instant,
-    { fenetre = vue.fenetre, sens = vue.sens, suivis = perimetre, pause = vue.pause }, reglages)
+    { fenetre = vue.fenetre, sens = vue.sens, suivis = perimetre }, reglages)
   if vue.onglet == "suivis" and vue.tout then
     resultat.lignes = classement.classer(etat, instant,
-      { fenetre = vue.fenetre, sens = vue.sens, suivis = vue.suivis, pause = vue.pause }, reglages).lignes
+      { fenetre = vue.fenetre, sens = vue.sens, suivis = vue.suivis }, reglages).lignes
   end
   return resultat
 end
