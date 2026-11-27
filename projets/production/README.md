@@ -15,7 +15,7 @@ wget run https://raw.githubusercontent.com/thibaut25b/minecraft_copaings/main/in
 ```
 
 `/production/diag` : périphériques, pont, coffre modèle et clés suivies. `/production/diag iron` : id, nbt, nom et
-quantité des items dont l'id ou le nom contient « iron ». `/production/diag tout` : durée et mémoire d'un
+quantité des items dont l'id ou le nom contient « iron ». `/production/diag tout` : durée et nombre de types d'un
 `getItems()` complet. Détail dans `/production-diag.txt`.
 
 ## Deux façons de l'utiliser
