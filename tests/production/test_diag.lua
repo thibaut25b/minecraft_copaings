@@ -71,13 +71,13 @@ return {
     verif.vrai(texte:find("productivebees:configurable_honeycomb | a3f1c9e2 | Diamond Comb | 5", 1, true), texte)
   end,
 
-  diag_tout_chronometre_get_items_et_mesure_la_memoire = function()
+  diag_tout_chronometre_get_items_sans_collectgarbage_absent_de_cc = function()
     local ramasse = collectgarbage
-    collectgarbage = function() return 2048 end
-    local disque, texte = lancer({ pont_0 = pont_garni() }, { pont_0 = "me_bridge" }, { "tout" })
-    verif.vrai(texte:find("getItems%(%) : %d+ ms, 4 entr.-, 4 types"), texte)
-    verif.vrai(texte:find(vers_cc("Mémoire : "), 1, true), texte)
+    collectgarbage = nil
+    local ok, disque, texte = pcall(lancer, { pont_0 = pont_garni() }, { pont_0 = "me_bridge" }, { "tout" })
     collectgarbage = ramasse
+    verif.vrai(ok, tostring(disque))
+    verif.vrai(texte:find("getItems%(%) : %d+ ms, 4 entr.-, 4 types"), texte)
     verif.vrai(disque.disque["production-diag.txt"]:find("chrono", 1, true))
   end,
 

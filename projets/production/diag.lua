@@ -92,7 +92,6 @@ local function lire_tout()
 end
 
 if recherche == "tout" then
-  local memoire_avant = collectgarbage("count")
   local debut = os.epoch("utc")
   local items = lire_tout()
   local duree = os.epoch("utc") - debut
@@ -100,11 +99,8 @@ if recherche == "tout" then
     local instantane = inventaire.normaliser(items)
     local types = 0
     for _ in pairs(instantane) do types = types + 1 end
-    local memoire_apres = collectgarbage("count")
-    rapport.chrono = { duree_ms = duree, items = #items, types = types, memoire_avant_ko = memoire_avant,
-      memoire_apres_ko = memoire_apres }
+    rapport.chrono = { duree_ms = duree, items = #items, types = types }
     noter(string.format("getItems() : %d ms, %d entrées, %d types", duree, #items, types))
-    noter(string.format("Mémoire : %d Ko avant, %d Ko après", math.floor(memoire_avant), math.floor(memoire_apres)))
   end
 elseif recherche then
   local motif = recherche:lower()
